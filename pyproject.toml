@@ -1,0 +1,47 @@
+[project]
+name = "shadowmen"
+version = "0.1.0"
+description = "An evolving colony of shadow people with a predator, sexual selection, and island speciation."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "PyGObject>=3.42.0",
+    "pycairo>=1.21.0",
+]
+authors = [
+    { name = "Demo User", email = "demo@example.com" }
+]
+keywords = ["evolution", "simulation", "gtk", "cairo", "desktop-overlay"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Environment :: X11 Applications",
+    "Topic :: Scientific/Engineering :: Artificial Life",
+]
+
+[project.scripts]
+shadowmen = "shadowmen.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "RET", "SIM", "PTH"]
+ignore = ["E203", "E221", "E241"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["gi.*", "cairo.*"]
+ignore_missing_imports = true

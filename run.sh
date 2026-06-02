@@ -1,2 +1,5 @@
 #!/usr/bin/env bash
-exec python3 "$(dirname "$(realpath "$0")")/shadowmen.py" "$@"
+set -e
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="$DIR:$PYTHONPATH"
+exec python3 "$DIR/shadowmen.py" "$@"
