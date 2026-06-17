@@ -3,6 +3,8 @@ import shutil
 import subprocess
 import os
 import logging
+from dataclasses import dataclass
+from typing import List, Tuple, Optional
 
 log = logging.getLogger(__name__)
 
@@ -14,36 +16,31 @@ _FULLSCREEN_MARGIN: int = 10        # Pixels of tolerance for fullscreen detecti
 _WMCTRL_TIMEOUT: float = 2.0        # Seconds to wait for wmctrl output
 _MIN_SCREEN_DIM: int = 100          # Minimum sane screen dimension
 
+@dataclass(frozen=True)
+class WindowSnapshot:
+    """Immutable snapshot of window geometry to prevent race conditions."""
+    x: int
+    y: int
+    w: int
+    h: int
+    id: str
+    biome: str = "neutral"
 
-def get_windows(sw: int, sh: int) -> list[tuple[int, int, int, int]]:
-    """Query wmctrl for visible, reasonably-sized non-fullscreen windows.
-    
-    Returns list of (x, y, width, height) tuples for candidate windows.
-    Backwards compatible: returns empty list if wmctrl unavailable or fails.
-    """
+def get_windows(sw: int, sh: int) -> List[WindowSnapshot]:
+    """Query wmctrl for visible, reasonably-sized non-fullscreen windows."""
     global _wmctrl_available
 
-    # Validate screen dimensions
     if sw < _MIN_SCREEN_DIM or sh < _MIN_SCREEN_DIM:
-        log.debug("Screen dimensions %dx%d too small, skipping window query", sw, sh)
         return []
 
-    # Thread-safe lazy initialization
     if _wmctrl_available is None:
         with _wmctrl_lock:
-            # Double-check after acquiring lock
             if _wmctrl_available is None:
                 _wmctrl_available = shutil.which("wmctrl") is not None
                 if not _wmctrl_available:
-                    log.info(
-                        "wmctrl not found — window-top perching is disabled. "
-                        "Install with: sudo apt install wmctrl"
-                    )
+                    log.info("wmctrl not found — window-top perching disabled.")
                 elif os.getenv("XDG_SESSION_TYPE") == "wayland":
-                    log.info(
-                        "Wayland session detected — wmctrl may have limited functionality. "
-                        "Window-top perching might not work as expected."
-                    )
+                    log.info("Wayland session detected — wmctrl functionality may be limited.")
 
     if not _wmctrl_available:
         return []
@@ -55,50 +52,42 @@ def get_windows(sw: int, sh: int) -> list[tuple[int, int, int, int]]:
             stderr=subprocess.DEVNULL,
             timeout=_WMCTRL_TIMEOUT,
         )
-    except subprocess.TimeoutExpired:
-        log.warning("wmctrl timed out after %.1fs", _WMCTRL_TIMEOUT)
-        return []
-    except subprocess.CalledProcessError as e:
-        log.debug("wmctrl exited with code %d", e.returncode)
-        return []
-    except OSError as e:
-        log.debug("wmctrl failed: %s", e)
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError):
         return []
 
-    wins: list[tuple[int, int, int, int]] = []
+    wins: List[WindowSnapshot] = []
     for line in raw.splitlines():
-        parts = line.split(None, 6)  # Split on whitespace, max 7 fields
+        parts = line.split(None, 6)
         if len(parts) < 6:
-            log.debug("Skipping malformed wmctrl line: %r", line)
             continue
         
         try:
-            # parts[0] = window id, parts[1] = desktop (-1 = sticky/all desktops)
+            wid = parts[0]
             desktop = int(parts[1])
-            if desktop < 0:
-                continue  # Skip sticky windows (panels, docks, etc.)
+            if desktop < 0: continue
             
             x, y, w, h = int(parts[2]), int(parts[3]), int(parts[4]), int(parts[5])
-        except (ValueError, IndexError) as e:
-            log.debug("Failed to parse wmctrl line %r: %s", line, e)
+            title = parts[6].lower() if len(parts) > 6 else ""
+        except (ValueError, IndexError):
             continue
 
-        # Filter by size constraints
         if w < _MIN_WINDOW_SIZE or h < _MIN_WINDOW_SIZE:
             continue
         if w >= sw - _FULLSCREEN_MARGIN and h >= sh - _FULLSCREEN_MARGIN:
-            continue  # Skip fullscreen or near-fullscreen windows
+            continue
         
-        wins.append((x, y, w, h))
+        # Biome detection
+        biome = "neutral"
+        if "terminal" in title or "term" in title:
+            biome = "hardened"
+        elif "browser" in title or "firefox" in title or "chrome" in title:
+            biome = "information-rich"
+
+        wins.append(WindowSnapshot(x, y, w, h, wid, biome))
     
     return wins
 
-
 def reset_wmctrl_cache() -> None:
-    """Force re-detection of wmctrl availability on next call.
-    
-    Useful if wmctrl was installed/uninstalled during runtime.
-    """
     global _wmctrl_available
     with _wmctrl_lock:
         _wmctrl_available = None
