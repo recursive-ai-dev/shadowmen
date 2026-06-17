@@ -6,7 +6,7 @@ import math
 from shadowmen.config import SimConfig
 from shadowmen.entities import Colony
 from shadowmen.ui.panel import ConfigPanel
-from shadowmen.utils import get_windows
+from shadowmen.utils import get_windows, WindowSnapshot
 
 try:
     import gi
@@ -54,7 +54,7 @@ class ShadowMen(Gtk.Window):
         self.area = area
 
         self.colony: Colony = Colony(config.population, self.sw, self.sh, config=config)
-        self.win_cache: list[tuple[int, int, int, int]] = []
+        self.win_cache: list[WindowSnapshot] = []
         self._win_tick: int = 0
         self._panel: ConfigPanel | None = None
 
@@ -104,12 +104,17 @@ class ShadowMen(Gtk.Window):
 
     def _tick(self) -> bool:
         self._win_tick += 1
-        if self._win_tick >= 30:
+        if self._win_tick >= 15:
             old = self.win_cache
             self.win_cache = get_windows(self.sw, self.sh)
             self._win_tick = 0
-            if self.win_cache != old:
+
+            if len(old) != len(self.win_cache) or any(
+                abs(o.x - n.x) > 5 or abs(o.y - n.y) > 5
+                for o, n in zip(sorted(old, key=lambda w: w.id), sorted(self.win_cache, key=lambda w: w.id))
+            ):
                 self.colony.react_to_windows(old, self.win_cache)
+
         self.colony.tick(self.win_cache)
         self.area.queue_draw()
         return True
