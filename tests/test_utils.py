@@ -4,9 +4,9 @@ from shadowmen.utils import get_windows, WindowSnapshot
 
 def test_get_windows_no_wmctrl():
     with patch("shutil.which", return_value=None):
-        # Reset the global _wmctrl_available for this test
+        # Reset the global _wm_available for this test
         import shadowmen.utils
-        shadowmen.utils._wmctrl_available = None
+        shadowmen.utils._wm_available = None
         
         wins = get_windows(1920, 1080)
         assert wins == []
@@ -21,7 +21,7 @@ def test_get_windows_with_mock_output():
     
     with patch("shutil.which", return_value="/usr/bin/wmctrl"),          patch("subprocess.check_output", return_value=mock_output):
         import shadowmen.utils
-        shadowmen.utils._wmctrl_available = True
+        shadowmen.utils._wm_available = True
         
         wins = get_windows(1920, 1080)
         assert len(wins) == 1
@@ -33,7 +33,7 @@ def test_get_windows_with_mock_output():
 def test_get_windows_subprocess_error():
     with patch("shutil.which", return_value="/usr/bin/wmctrl"),          patch("subprocess.check_output", side_effect=OSError("wmctrl failed")):
         import shadowmen.utils
-        shadowmen.utils._wmctrl_available = True
+        shadowmen.utils._wm_available = True
         
         wins = get_windows(1920, 1080)
         assert wins == []
@@ -42,7 +42,7 @@ def test_get_windows_malformed_output():
     mock_output = "garbage line\n0x1 0 1 2 3 4" # too few parts
     with patch("shutil.which", return_value="/usr/bin/wmctrl"),          patch("subprocess.check_output", return_value=mock_output):
         import shadowmen.utils
-        shadowmen.utils._wmctrl_available = True
+        shadowmen.utils._wm_available = True
         
         wins = get_windows(1920, 1080)
         assert wins == []

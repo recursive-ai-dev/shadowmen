@@ -1,0 +1,5 @@
+PyGObject>=3.42.0
+pycairo>=1.21.0
+pygetwindow; sys_platform == 'win32'
+pyobjc-framework-Quartz; sys_platform == 'darwin'
+pyinstaller

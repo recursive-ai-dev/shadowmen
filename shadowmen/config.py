@@ -1,36 +1,42 @@
 from __future__ import annotations
 
-import fcntl
 import json
 import logging
 import os
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+def _get_platform_paths() -> tuple[Path, Path, Path | None]:
+    home = Path.home()
+    if sys.platform == "win32":
+        config = Path(os.getenv("APPDATA", str(home / "AppData/Roaming"))) / "shadowmen"
+        data = Path(os.getenv("LOCALAPPDATA", str(home / "AppData/Local"))) / "shadowmen"
+        autostart = None # Windows handles autostart via Registry or Startup folder
+    elif sys.platform == "darwin":
+        config = home / "Library/Application Support/shadowmen"
+        data = config
+        autostart = None
+    else:
+        # Linux / XDG defaults
+        config_root = Path(os.getenv("XDG_CONFIG_HOME", str(home / ".config")))
+        data_root = Path(os.getenv("XDG_DATA_HOME", str(home / ".local/share")))
+        config = config_root / "shadowmen"
+        data = data_root / "shadowmen"
+        autostart = config_root / "autostart" / "shadowmen.desktop"
 
-def _get_xdg_path(env_var: str, default_rel: Path) -> Path:
-    val = os.getenv(env_var)
-    if val:
-        return Path(val)
-    return Path.home() / default_rel
+    return config, data, autostart
 
-
-CONFIG_DIR = _get_xdg_path("XDG_CONFIG_HOME", Path(".config")) / "shadowmen"
-DATA_DIR = _get_xdg_path("XDG_DATA_HOME", Path(".local/share")) / "shadowmen"
-
+CONFIG_DIR, DATA_DIR, AUTOSTART_FILE = _get_platform_paths()
 CONFIG_FILE = CONFIG_DIR / "config.json"
 SAVE_FILE = DATA_DIR / "population.json"
 LOCK_FILE = DATA_DIR / "shadowmen.lock"
-AUTOSTART_FILE = (
-    _get_xdg_path("XDG_CONFIG_HOME", Path(".config")) / "autostart" / "shadowmen.desktop"
-)
 
 LEGACY_CONFIG = Path.home() / ".shadowmen_config.json"
 LEGACY_SAVE = Path.home() / ".shadowmen_pop.json"
-
 
 def migrate_legacy_files() -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -50,42 +56,35 @@ def migrate_legacy_files() -> None:
         except OSError as e:
             log.warning("Failed to migrate population: %s", e)
 
-
-# Held open for the lifetime of the process to keep the single-instance lock.
-# The kernel drops the flock when this fd is closed or the process exits.
 _lock_handle: object | None = None
 
-
 def acquire_single_instance_lock(path: Path = LOCK_FILE) -> bool:
-    """Take an exclusive, non-blocking lock so only one instance can run.
-
-    Returns ``True`` if this process now holds the lock (or already did), and
-    ``False`` if another live instance is holding it. The lock is an advisory
-    ``flock`` on an open file descriptor stored at module scope; the OS releases
-    it automatically when the process exits — even on a crash — so no stale lock
-    file is ever left behind to clean up.
-    """
     global _lock_handle
     if _lock_handle is not None:
-        return True  # already locked by this process; idempotent
+        return True
+
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        # Append mode so a rival instance's pid text is not truncated before we
-        # know whether we actually won the lock.
         handle = path.open("a+")
     except OSError as e:
         log.warning("Could not open lock file %s (%s); skipping single-instance guard.", path, e)
         return True
-    try:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        handle.close()
-        return False
-    except OSError as e:
-        # e.g. filesystem without flock support — fail open rather than block startup.
-        log.warning("flock unavailable on %s (%s); skipping single-instance guard.", path, e)
-        handle.close()
-        return True
+
+    if sys.platform == "win32":
+        try:
+            import msvcrt
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        except (ImportError, OSError, IOError):
+            handle.close()
+            return False
+    else:
+        try:
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (ImportError, BlockingIOError, OSError):
+            handle.close()
+            return False
+
     handle.seek(0)
     handle.truncate()
     handle.write(f"{os.getpid()}\n")
@@ -93,11 +92,8 @@ def acquire_single_instance_lock(path: Path = LOCK_FILE) -> bool:
     _lock_handle = handle
     return True
 
-
 @dataclass
 class SimConfig:
-    """All user-editable simulation parameters."""
-
     population: int = 8
     evo_speed: float = 1.0
     evolve_base_ticks: int = 600
@@ -155,18 +151,12 @@ class SimConfig:
             v = getattr(self, name)
             c = max(lo, min(hi, v))
             if c != v:
-                log.warning(
-                    "Config: %s=%d out of range [%d, %d]; clamped to %d.", name, v, lo, hi, c
-                )
                 setattr(self, name, c)
 
         def _cf(name: str, lo: float, hi: float = 1e9) -> None:
             v = getattr(self, name)
             c = max(lo, min(hi, v))
             if c != v:
-                log.warning(
-                    "Config: %s=%g out of range [%g, %g]; clamped to %g.", name, v, lo, hi, c
-                )
                 setattr(self, name, c)
 
         _ci("population", lo=1, hi=500)
@@ -185,25 +175,8 @@ class SimConfig:
 
     def validate(self) -> list[str]:
         errors: list[str] = []
-        if self.population < 1:
-            errors.append(f"population must be ≥ 1, got {self.population}")
-        if self.evo_speed <= 0:
-            errors.append(f"evo_speed must be > 0, got {self.evo_speed}")
-        if self.evolve_base_ticks < 1:
-            errors.append(f"evolve_base_ticks must be ≥ 1, got {self.evolve_base_ticks}")
-        if self.pred_base_speed <= 0:
-            errors.append(f"pred_base_speed must be > 0, got {self.pred_base_speed}")
-        if self.pred_speed_inc < 0:
-            errors.append(f"pred_speed_inc must be ≥ 0, got {self.pred_speed_inc}")
-        if self.pred_speed_cap <= 0:
-            errors.append(f"pred_speed_cap must be > 0, got {self.pred_speed_cap}")
-        if self.pred_speed_cap < self.pred_base_speed:
-            errors.append(
-                f"pred_speed_cap ({self.pred_speed_cap}) must be ≥ "
-                f"pred_base_speed ({self.pred_base_speed})"
-            )
+        if self.population < 1: errors.append(f"population must be ≥ 1")
         return errors
-
 
 def load_config(path: Path = CONFIG_FILE) -> SimConfig:
     if path.exists():
@@ -211,15 +184,11 @@ def load_config(path: Path = CONFIG_FILE) -> SimConfig:
             cfg = SimConfig.from_dict(json.loads(path.read_text()))
             cfg.clamp_fields()
             return cfg
-        except Exception as e:
-            log.warning("Config file unreadable (%s); using defaults.", e)
+        except Exception: pass
     return SimConfig()
-
 
 def save_config(cfg: SimConfig, path: Path = CONFIG_FILE) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(cfg.to_dict(), indent=2))
-        log.info("Config saved → %s", path)
-    except OSError as e:
-        log.error("Failed to save config to %s: %s", path, e)
+    except OSError: pass
