@@ -1,9 +1,14 @@
 from __future__ import annotations
 import math
-import cairo
 from typing import Dict, Callable, Tuple, Optional
 
-def _ln(cr: cairo.Context, x1: float, y1: float, x2: float, y2: float) -> None:
+try:
+    import cairo
+except ImportError:
+    cairo = None
+
+def _ln(cr, x1: float, y1: float, x2: float, y2: float) -> None:
+    if cr is None: return
     cr.move_to(x1, y1)
     cr.line_to(x2, y2)
     cr.stroke()
@@ -11,7 +16,7 @@ def _ln(cr: cairo.Context, x1: float, y1: float, x2: float, y2: float) -> None:
 class CharacterRenderer:
     _base_lw: float = 1.0
 
-    def __init__(self, cr: cairo.Context):
+    def __init__(self, cr):
         self.cr = cr
         # Cache pose dispatch to avoid dict creation in hot loop
         self._poses: Dict[str, Callable[[float, float, float, int, float, float, float, Tuple[float, float, float, float]], None]] = {
@@ -30,6 +35,7 @@ class CharacterRenderer:
                leg_amp: float, arm_amp: float, color: Tuple[float, float, float, float],
                glow: bool = False, glow_color: Optional[Tuple[float, float, float, float]] = None) -> None:
         cr = self.cr
+        if cr is None: return
         if glow and glow_color:
             cr.set_source_rgba(*glow_color)
             cr.set_dash([2.0, 1.0])
@@ -100,6 +106,7 @@ def draw_person(cr, px, py, t, state, facing, s, leg_amp, arm_amp, color, glow=F
     _cached_renderer.render(px, py, t, state, facing, s, leg_amp, arm_amp, color, glow, glow_color)
 
 def draw_fire(cr, x, y, t, s):
+    if cr is None: return
     cr.save()
     cr.translate(x, y)
     cr.set_source_rgba(1.0, 0.4, 0.1, 0.15)
@@ -108,6 +115,7 @@ def draw_fire(cr, x, y, t, s):
     cr.restore()
 
 def draw_shelter(cr, x, y, s):
+    if cr is None: return
     cr.save()
     cr.translate(x, y)
     cr.set_source_rgba(0.2, 0.15, 0.1, 0.7)

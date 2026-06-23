@@ -4,7 +4,7 @@ import subprocess
 import os
 import logging
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any, Dict
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +25,32 @@ class WindowSnapshot:
     h: int
     id: str
     biome: str = "neutral"
+
+class SpatialHash:
+    """A simple grid-based spatial hash for O(1) neighbor lookups."""
+    def __init__(self, cell_size: int = 120):
+        self.cell_size = cell_size
+        self.grid: Dict[Tuple[int, int], List[Any]] = {}
+
+    def insert(self, obj: Any, x: float, y: float) -> None:
+        key = (int(x // self.cell_size), int(y // self.cell_size))
+        if key not in self.grid:
+            self.grid[key] = []
+        self.grid[key].append(obj)
+
+    def query(self, x: float, y: float, radius: float) -> List[Any]:
+        results = []
+        x_start = int((x - radius) // self.cell_size)
+        x_end = int((x + radius) // self.cell_size)
+        y_start = int((y - radius) // self.cell_size)
+        y_end = int((y + radius) // self.cell_size)
+
+        for gx in range(x_start, x_end + 1):
+            for gy in range(y_start, y_end + 1):
+                objs = self.grid.get((gx, gy))
+                if objs:
+                    results.extend(objs)
+        return results
 
 def get_windows(sw: int, sh: int) -> List[WindowSnapshot]:
     """Query wmctrl for visible, reasonably-sized non-fullscreen windows."""

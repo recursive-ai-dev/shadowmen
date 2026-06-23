@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from shadowmen.entities import Person, Predator, Colony, KillEffect
 from shadowmen.genome import Genome
 from shadowmen.config import SimConfig
+from shadowmen.utils import WindowSnapshot, SpatialHash
 
 @pytest.fixture
 def config():
@@ -130,12 +131,21 @@ def test_colony_interactions(config):
     b.x = 105
     a.y = b.y = 1080 - a.genome.scale * 0.3
     a.state = b.state = "walk"
+    a.energy = 100
+    b.energy = 20
     
-    # Mock random to ensure wave happens
-    with patch("random.random", return_value=0.001):
-        colony._handle_interactions()
-        assert a.state == "wave"
-        assert b.state == "wave"
+    # Ensure they are kin
+    a.genome = Genome()
+    b.genome = Genome()
+    a.genome.altruism = 1.0
+
+    shash = SpatialHash()
+    shash.insert(a, a.x, a.y)
+    shash.insert(b, b.x, b.y)
+
+    colony._handle_interactions(shash)
+    assert a.energy < 100
+    assert b.energy > 20
 
 def test_colony_react_to_windows(config):
     colony = Colony(1, 1920, 1080, config=config)
@@ -144,7 +154,7 @@ def test_colony_react_to_windows(config):
     p.y = p.floor_y = 500
     p.state = "idle"
     
-    old_wins = [(90, 500, 100, 20)]
+    old_wins = [WindowSnapshot(90, 500, 100, 20, "win1")]
     new_wins = [] # Window closed
     
     colony.react_to_windows(old_wins, new_wins)
