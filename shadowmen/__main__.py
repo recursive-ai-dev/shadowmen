@@ -6,20 +6,18 @@ import os
 import signal
 import sys
 
-try:
-    import gi
-
-    gi.require_version("Gtk", "3.0")
-    from gi.repository import GLib, Gtk
-except ImportError:
-    sys.exit("Install: sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0")
-
-if (
-    not os.environ.get("DISPLAY")
-    and not os.environ.get("WAYLAND_DISPLAY")
-    and not any(a in sys.argv for a in ("--install-autostart", "--version"))
-):
-    sys.exit("No display detected. Run this on a desktop session with a display server.")
+def check_dependencies() -> None:
+    try:
+        import gi
+        gi.require_version("Gtk", "3.0")
+    except ImportError:
+        if sys.platform == "win32":
+            msg = "Install: MSYS2/MinGW-w64 or Gtk-for-Windows-Runtime"
+        elif sys.platform == "darwin":
+            msg = "Install: brew install pygobject3 gtk+3"
+        else:
+            msg = "Install: sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0"
+        sys.exit(f"GTK 3 not found. {msg}")
 
 from shadowmen import __version__
 from shadowmen.config import (
@@ -30,8 +28,6 @@ from shadowmen.config import (
     migrate_legacy_files,
     save_config,
 )
-from shadowmen.ui.overlay import ShadowMen
-from shadowmen.ui.panel import ConfigPanel, install_autostart
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,6 +38,11 @@ log = logging.getLogger(__name__)
 
 
 def main() -> None:
+    check_dependencies()
+    from gi.repository import GLib, Gtk
+    from shadowmen.ui.overlay import ShadowMen
+    from shadowmen.ui.panel import ConfigPanel, install_autostart
+
     migrate_legacy_files()
 
     ap = argparse.ArgumentParser(description="Evolving shadow people")
@@ -62,30 +63,27 @@ def main() -> None:
     ap.add_argument("--install-autostart", action="store_true")
     args = ap.parse_args()
 
+    if sys.platform not in ("win32", "darwin"):
+        if (
+            not os.environ.get("DISPLAY")
+            and not os.environ.get("WAYLAND_DISPLAY")
+            and not args.install_autostart
+        ):
+            sys.exit("No display detected. Run this on a desktop session with a display server.")
+
     cfg = load_config()
 
-    if args.count:
-        cfg.population = args.count
-    if args.predator:
-        cfg.use_predator = True
-    if args.evo_speed:
-        cfg.evo_speed = args.evo_speed
-    if args.evolve_every:
-        cfg.evolve_base_ticks = args.evolve_every
-    if args.flee_radius_x:
-        cfg.flee_radius_x = args.flee_radius_x
-    if args.flee_radius_y:
-        cfg.flee_radius_y = args.flee_radius_y
-    if args.panic_radius:
-        cfg.panic_radius = args.panic_radius
-    if args.pred_base_speed:
-        cfg.pred_base_speed = args.pred_base_speed
-    if args.pred_speed_inc:
-        cfg.pred_speed_inc = args.pred_speed_inc
-    if args.pred_speed_cap:
-        cfg.pred_speed_cap = args.pred_speed_cap
-    if args.kill_effect_ticks:
-        cfg.kill_effect_ticks = args.kill_effect_ticks
+    if args.count: cfg.population = args.count
+    if args.predator: cfg.use_predator = True
+    if args.evo_speed: cfg.evo_speed = args.evo_speed
+    if args.evolve_every: cfg.evolve_base_ticks = args.evolve_every
+    if args.flee_radius_x: cfg.flee_radius_x = args.flee_radius_x
+    if args.flee_radius_y: cfg.flee_radius_y = args.flee_radius_y
+    if args.panic_radius: cfg.panic_radius = args.panic_radius
+    if args.pred_base_speed: cfg.pred_base_speed = args.pred_base_speed
+    if args.pred_speed_inc: cfg.pred_speed_inc = args.pred_speed_inc
+    if args.pred_speed_cap: cfg.pred_speed_cap = args.pred_speed_cap
+    if args.kill_effect_ticks: cfg.kill_effect_ticks = args.kill_effect_ticks
 
     if args.install_autostart:
         install_autostart(cfg)
@@ -97,12 +95,10 @@ def main() -> None:
         log.info("Population reset.")
 
     if args.config_panel:
-
         def _on_apply(c: SimConfig, restart: bool) -> None:
             save_config(c)
             if not restart:
                 log.info("Settings applied.")
-
         panel = ConfigPanel(cfg, on_apply=_on_apply)
         panel.connect("destroy", Gtk.main_quit)
         Gtk.main()
@@ -117,8 +113,10 @@ def main() -> None:
         app.colony.save()
         Gtk.main_quit()
 
-    signal.signal(signal.SIGINT, _quit)
-    signal.signal(signal.SIGTERM, _quit)
+    if sys.platform != "win32":
+        signal.signal(signal.SIGINT, _quit)
+        signal.signal(signal.SIGTERM, _quit)
+
     GLib.timeout_add(200, lambda: True)
 
     Gtk.main()
