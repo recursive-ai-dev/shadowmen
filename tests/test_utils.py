@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from shadowmen.utils import get_windows
+from shadowmen.utils import get_windows, WindowSnapshot
 
 def test_get_windows_no_wmctrl():
     with patch("shutil.which", return_value=None):
@@ -19,18 +19,19 @@ def test_get_windows_with_mock_output():
         "0x01234570  0 0    0    1920 1080 hostname FS\n"      # Fullscreen (w >= sw - 10)
     )
     
-    with patch("shutil.which", return_value="/usr/bin/wmctrl"), \
-         patch("subprocess.check_output", return_value=mock_output):
+    with patch("shutil.which", return_value="/usr/bin/wmctrl"),          patch("subprocess.check_output", return_value=mock_output):
         import shadowmen.utils
         shadowmen.utils._wmctrl_available = True
         
         wins = get_windows(1920, 1080)
         assert len(wins) == 1
-        assert wins[0] == (100, 200, 800, 600)
+        assert wins[0].x == 100
+        assert wins[0].y == 200
+        assert wins[0].w == 800
+        assert wins[0].h == 600
 
 def test_get_windows_subprocess_error():
-    with patch("shutil.which", return_value="/usr/bin/wmctrl"), \
-         patch("subprocess.check_output", side_effect=OSError("wmctrl failed")):
+    with patch("shutil.which", return_value="/usr/bin/wmctrl"),          patch("subprocess.check_output", side_effect=OSError("wmctrl failed")):
         import shadowmen.utils
         shadowmen.utils._wmctrl_available = True
         
@@ -39,8 +40,7 @@ def test_get_windows_subprocess_error():
 
 def test_get_windows_malformed_output():
     mock_output = "garbage line\n0x1 0 1 2 3 4" # too few parts
-    with patch("shutil.which", return_value="/usr/bin/wmctrl"), \
-         patch("subprocess.check_output", return_value=mock_output):
+    with patch("shutil.which", return_value="/usr/bin/wmctrl"),          patch("subprocess.check_output", return_value=mock_output):
         import shadowmen.utils
         shadowmen.utils._wmctrl_available = True
         

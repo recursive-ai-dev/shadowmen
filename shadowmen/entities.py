@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from shadowmen.config import SAVE_FILE, SimConfig
-from shadowmen.genome import Genome
+from shadowmen.genome import Genome, PredatorGenome
 from shadowmen.render import draw_fire, draw_person, draw_shelter
-from shadowmen.utils import WindowSnapshot
+from shadowmen.utils import WindowSnapshot, SpatialHash
 
 try:
     import cairo
@@ -37,7 +37,7 @@ class Person:
         self.sw, self.sh = sw, sh
         self.genome = genome or Genome.random()
         s = self.genome.scale
-        self.energy = 100.0  # New: Energy meter
+        self.energy = 100.0
 
         if home_x is not None and home_y is not None:
             self.x, self.y = home_x, home_y
@@ -68,9 +68,10 @@ class Person:
         self.t += 1
         self.genome.fitness += 0.004
 
-        # Metabolism: Energy decay
-        cost = self.genome.metabolism
-        if self.state in ("run", "jump", "climb"): cost *= 2.0
+        # Advanced Metabolism: scale * (1 + metabolism * v^2)
+        vel_sq = self.vx**2 + self.vy**2
+        cost = (self.genome.scale / 18.0) * (1.0 + self.genome.metabolism * vel_sq * 0.5)
+
         # Biome effects
         current_biome = "neutral"
         for win in windows:
@@ -78,14 +79,16 @@ class Person:
                 current_biome = win.biome
                 break
 
-        if current_biome == "hardened": cost *= 1.5
-        elif current_biome == "information-rich": self.energy += 0.05
-        self.energy -= cost
+        if current_biome == "hardened": cost *= 1.4
+        elif current_biome == "information-rich": self.energy = min(100.0, self.energy + 0.08)
+
+        self.energy -= cost * 0.05 # Normalization
 
         if self.energy <= 0:
             self.energy = 0
             self.state = "crouch" # Exhaustion
             self.vx = 0
+            self.timer = max(self.timer, 100)
 
         if self.alarm_timer > 0: self.alarm_timer -= 1
         if self.fire_timer > 0:
@@ -94,6 +97,9 @@ class Person:
 
         if self.state in ("walk", "run"):
             self._walk_step(windows)
+            # Satiety-based behavior: rest if energy is low
+            if self.energy < 20.0 and not self.fleeing:
+                self._pause(random.choice(["sit", "idle"]), random.randint(150, 400))
         elif self.state == "climb":
             self._climb_step(windows)
         elif self.state == "fall":
@@ -102,8 +108,8 @@ class Person:
             self._jump_step(windows)
         elif self.state in ("idle", "sit", "wave", "crouch"):
             self.timer -= 1
-            # Grazing / Recovery
-            if self.state in ("sit", "idle"): self.energy = min(100.0, self.energy + 0.1)
+            # Recovery bonus
+            self.energy = min(100.0, self.energy + 0.15)
             if self.timer <= 0: self._resume_walk()
 
     def draw(self, cr: cairo.Context) -> None:
@@ -114,7 +120,6 @@ class Person:
             draw_fire(cr, self.fire_x, self.fire_y, self.t, s)
 
         color = g.body_color()
-        # Alarm glow
         if self.alarm_timer > 0:
             draw_person(cr, self.x, self.y, self.t, self.state, self.facing, s, g.leg_amp, g.arm_amp, color, glow=True, glow_color=(1, 1, 0, 0.8))
 
@@ -213,22 +218,28 @@ class Person:
 
 class Predator:
     SCALE = 22.0
-    def __init__(self, sw: int, sh: int, config: SimConfig) -> None:
+    def __init__(self, sw: int, sh: int, config: SimConfig, genome: PredatorGenome | None = None) -> None:
         self.config, self.sw, self.sh = config, sw, sh
+        self.genome = genome or PredatorGenome.random()
         self.x, self.y = float(sw // 2), float(sh - self.SCALE * 0.3)
-        self.speed, self.vx, self.vy, self.facing, self.state, self.t, self.kills = config.pred_base_speed, config.pred_base_speed, 0.0, 1, "run", 0.0, 0
+        self.speed = config.pred_base_speed * self.genome.speed_mult
+        self.vx, self.vy, self.facing, self.state, self.t, self.kills = self.speed, 0.0, 1, "run", 0.0, 0
 
     def update(self, people: List[Person], windows: List[WindowSnapshot]) -> None:
         self.t += 1
         if people:
-            target = min(people, key=lambda p: abs(p.x - self.x))
-            self.vx = math.copysign(self.speed, target.x - self.x)
+            # Only see people within sense_range
+            visible = [p for p in people if abs(p.x - self.x) < self.genome.sense_range]
+            if visible:
+                target = min(visible, key=lambda p: abs(p.x - self.x))
+                self.vx = math.copysign(self.speed, target.x - self.x)
+
         self.x = max(self.SCALE, min(self.sw - self.SCALE, self.x + self.vx))
         self.facing = 1 if self.vx >= 0 else -1
         floor = float(self.sh) - self.SCALE * 0.3
         self.vy += 0.65
         self.y = min(self.y + self.vy, floor)
-        if self.y >= floor: self.vy = self.y = self.floor_y = 0.0 or floor # logic fix
+        if self.y >= floor: self.vy = self.y = self.floor_y = floor
 
     def catch_radius(self) -> float: return self.SCALE * 0.85
     def on_kill(self) -> None:
@@ -250,6 +261,9 @@ class Colony:
                 data = json.loads(SAVE_FILE.read_text())
                 self.generation = int(data.get("generation", 0))
                 people = [Person(self.sw, self.sh, Genome.from_dict(d["genome"]), d.get("home_x"), d.get("home_y")) for d in data.get("people", [])]
+                if "predator_genome" in data and self.predator:
+                    self.predator.genome = PredatorGenome.from_dict(data["predator_genome"])
+                    self.predator.speed = self.config.pred_base_speed * self.predator.genome.speed_mult
                 while len(people) < self.count: people.append(Person(self.sw, self.sh))
                 return people[:self.count]
             except: pass
@@ -257,47 +271,56 @@ class Colony:
 
     def save(self) -> None:
         try:
-            payload = json.dumps({"generation": self.generation, "people": [{"genome": p.genome.to_dict(), "home_x": p.home_x, "home_y": p.home_y, "has_shelter": p.has_shelter} for p in self.people]}, indent=2)
+            payload = json.dumps({
+                "generation": self.generation,
+                "people": [{"genome": p.genome.to_dict(), "home_x": p.home_x, "home_y": p.home_y, "has_shelter": p.has_shelter} for p in self.people],
+                "predator_genome": self.predator.genome.to_dict() if self.predator else None
+            }, indent=2)
             SAVE_FILE.parent.mkdir(parents=True, exist_ok=True)
             SAVE_FILE.write_text(payload)
         except: pass
 
     def tick(self, windows: List[WindowSnapshot]) -> None:
         self.tick_n += 1
+        shash = SpatialHash(cell_size=150)
+        for p in self.people:
+            shash.insert(p, p.x, p.y)
+
         for p in self.people: p.update(windows)
-        self._handle_interactions()
-        if self.predator: self._handle_predator(windows)
+        self._handle_interactions(shash)
+        if self.predator: self._handle_predator(windows, shash)
         for ke in self.kill_effects: ke.age += 1
         self.kill_effects = [ke for ke in self.kill_effects if ke.age < ke.max_age]
         if self.tick_n % self.config.evolve_every == 0: self._evolve(); self.save()
 
-    def _handle_interactions(self) -> None:
-        # Kin selection: sharing energy or alarm calls
-        for i, a in enumerate(self.people):
-            for b in self.people[i+1:]:
-                dist = abs(a.x - b.x)
-                if dist < 50:
-                    # Energy sharing
-                    if a.energy > 60 and b.energy < 30:
-                        amt = 10 * a.genome.altruism
-                        a.energy -= amt; b.energy += amt
-                        a.genome.fitness += 0.5
+    def _handle_interactions(self, shash: SpatialHash) -> None:
+        for a in self.people:
+            if a.energy < 60: continue
+            neighbors = shash.query(a.x, a.y, 60)
+            for b in neighbors:
+                if a is b or b.energy >= 40: continue
+                r = a.genome.relatedness(b.genome)
+                if r * 20.0 > 8.0:
+                    amt = 10 * a.genome.altruism
+                    a.energy -= amt; b.energy += amt
+                    a.genome.fitness += 0.8 * r
 
-    def _handle_predator(self, windows: List[WindowSnapshot]) -> None:
+    def _handle_predator(self, windows: List[WindowSnapshot], shash: SpatialHash) -> None:
         pred = self.predator
         if not pred: return
         pred.update(self.people, windows)
 
-        # Alarm calls (Kin Selection)
         for p in self.people:
             p.fleeing = False
             if abs(p.x - pred.x) < self.config.flee_radius_x:
                 p.fleeing = True
                 if random.random() < p.genome.altruism and p.alarm_timer <= 0:
-                    p.alarm_timer = 60 # Signal for 2 seconds
-                    # Alert nearby kin
-                    for kin in self.people:
-                        if kin is not p and abs(kin.x - p.x) < 300:
+                    p.alarm_timer = 60
+                    neighbors = shash.query(p.x, p.y, 400)
+                    for kin in neighbors:
+                        if kin is p: continue
+                        r = p.genome.relatedness(kin.genome)
+                        if r * 50.0 > 5.0:
                             kin.fleeing = True
 
         for p in self.people:
@@ -311,6 +334,16 @@ class Colony:
                 self.people.remove(p)
                 pred.on_kill()
                 self._spawn_replacement(pred)
+
+        if pred.kills >= 5:
+            self._predator_reproduction()
+
+    def _predator_reproduction(self) -> None:
+        if not self.predator: return
+        log.info("Predator evolved!")
+        self.predator.genome = self.predator.genome.mutate()
+        self.predator.kills = 0
+        self.predator.speed = self.config.pred_base_speed * self.predator.genome.speed_mult
 
     def _spawn_replacement(self, pred: Predator) -> None:
         if len(self.people) < 2: self.people.append(Person(self.sw, self.sh)); return
@@ -341,4 +374,5 @@ class Colony:
     def stats(self) -> str:
         if not self.people: return "extinct"
         avg_e = sum(p.energy for p in self.people) / len(self.people)
-        return f"gen {self.generation} | energy {avg_e:.1f}"
+        pred_info = f" | pred-spd {self.predator.speed:.1f}" if self.predator else ""
+        return f"gen {self.generation} | energy {avg_e:.1f}{pred_info}"
