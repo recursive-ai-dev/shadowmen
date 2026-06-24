@@ -26,6 +26,7 @@ class KillEffect:
     max_age: int = 48
 
 class Person:
+    """An evolving agent that interacts with the desktop environment and other agents."""
     def __init__(
         self,
         sw: int,
@@ -86,9 +87,9 @@ class Person:
 
         if self.energy <= 0:
             self.energy = 0
-            self.state = "crouch" # Exhaustion
+            if self.state != "crouch":
+                self._pause("crouch", random.randint(100, 300)) # Exhaustion
             self.vx = 0
-            self.timer = max(self.timer, 100)
 
         if self.alarm_timer > 0: self.alarm_timer -= 1
         if self.fire_timer > 0:
@@ -157,11 +158,41 @@ class Person:
 
     def _choose_idle_behavior(self, g: Genome) -> None:
         r = random.random()
-        if r < g.sit_prob: self._pause("sit", random.randint(100, 380))
-        elif r < g.sit_prob + g.wave_prob: self._pause("wave", random.randint(80, 220))
-        elif not self.has_shelter and r < g.sit_prob + g.wave_prob + g.shelter_skill:
-            self.has_shelter, self.home_x, self.home_y = True, self.x, self.y
-            self._pause("crouch", random.randint(200, 450))
+        cumulative = 0.0
+
+        # sit_prob
+        cumulative += g.sit_prob
+        if r < cumulative:
+            self._pause("sit", random.randint(100, 380))
+            return
+
+        # wave_prob
+        cumulative += g.wave_prob
+        if r < cumulative:
+            self._pause("wave", random.randint(80, 220))
+            return
+
+        # run_prob: Trigger a burst of running
+        cumulative += g.run_prob
+        if r < cumulative:
+            self.state = "run"
+            self.vx = math.copysign(g.walk_speed * g.run_mult, self.vx)
+            return
+
+        # fire_skill: Occasionally start a fire
+        cumulative += g.fire_skill
+        if r < cumulative and self.fire_timer <= 0:
+            self.fire_timer = random.randint(200, 600)
+            self.fire_x, self.fire_y = self.x, self.y
+            self._pause("crouch", 60)
+            return
+
+        # shelter_skill: Build a home
+        if not self.has_shelter:
+            cumulative += g.shelter_skill
+            if r < cumulative:
+                self.has_shelter, self.home_x, self.home_y = True, self.x, self.y
+                self._pause("crouch", random.randint(200, 450))
 
     def _climb_step(self, windows: List[WindowSnapshot]) -> None:
         s = self.genome.scale
@@ -217,6 +248,7 @@ class Person:
         self.facing = 1 if self.vx > 0 else -1
 
 class Predator:
+    """A predator agent that hunts Persons and evolves over time."""
     SCALE = 22.0
     def __init__(self, sw: int, sh: int, config: SimConfig, genome: PredatorGenome | None = None) -> None:
         self.config, self.sw, self.sh = config, sw, sh
@@ -250,6 +282,7 @@ class Predator:
         draw_person(cr, self.x, self.y, self.t, self.state, self.facing, self.SCALE, 0.5, 0.42, (0.68, 0.08, 0.02, 0.95), glow=True, glow_color=(1, 0.3, 0.04, 0.62))
 
 class Colony:
+    """A collection of evolving Person agents and an optional Predator."""
     def __init__(self, count: int, sw: int, sh: int, *, config: SimConfig) -> None:
         self.config, self.count, self.sw, self.sh, self.tick_n, self.generation, self.kill_effects = config, count, sw, sh, 0, 0, []
         self.predator = Predator(sw, sh, config) if config.use_predator else None
@@ -296,10 +329,13 @@ class Colony:
     def _handle_interactions(self, shash: SpatialHash) -> None:
         for a in self.people:
             if a.energy < 60: continue
-            neighbors = shash.query(a.x, a.y, 60)
+            # Use social_r trait for interaction radius
+            interaction_radius = a.genome.social_r * 35.0
+            neighbors = shash.query(a.x, a.y, interaction_radius)
             for b in neighbors:
                 if a is b or b.energy >= 40: continue
                 r = a.genome.relatedness(b.genome)
+                # Kin selection based sharing
                 if r * 20.0 > 8.0:
                     amt = 10 * a.genome.altruism
                     a.energy -= amt; b.energy += amt

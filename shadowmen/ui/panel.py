@@ -146,10 +146,12 @@ class ConfigPanel(Gtk.Window):
 
     def _build_colony_tab(self) -> Gtk.Widget:
         box = self._tab_box()
-        box.pack_start(self._section_label("Colony"), False, False, 0)
+        box.pack_start(self._section_label("Colony Settings"), False, False, 0)
         box.pack_start(
             self._int_row(
-                "Population", "...", 1, 200, self._working.population, "population", True
+                "Population",
+                "Initial number of people in the colony.",
+                1, 200, self._working.population, "population", True
             ),
             False,
             False,
@@ -157,7 +159,9 @@ class ConfigPanel(Gtk.Window):
         )
         box.pack_start(
             self._float_row(
-                "Evo Speed ×", "...", 0.25, 10.0, 0.25, 2, self._working.evo_speed, "evo_speed"
+                "Evo Speed ×",
+                "Evolution speed multiplier. Higher values accelerate selection.",
+                0.25, 10.0, 0.25, 2, self._working.evo_speed, "evo_speed"
             ),
             False,
             False,
@@ -166,7 +170,7 @@ class ConfigPanel(Gtk.Window):
         box.pack_start(
             self._int_row(
                 "Evo Base Ticks",
-                "...",
+                "Number of frames between evolutionary cycles.",
                 60,
                 3600,
                 self._working.evolve_base_ticks,
@@ -198,10 +202,12 @@ class ConfigPanel(Gtk.Window):
 
     def _build_predator_tab(self) -> Gtk.Widget:
         box = self._tab_box()
-        box.pack_start(self._section_label("Predator"), False, False, 0)
+        box.pack_start(self._section_label("Predator Settings"), False, False, 0)
         box.pack_start(
             self._bool_row(
-                "Enable Predator", "...", self._working.use_predator, "use_predator", True
+                "Enable Predator",
+                "Introduce a red predator that hunts people to start an arms race.",
+                self._working.use_predator, "use_predator", True
             ),
             False,
             False,
@@ -210,7 +216,7 @@ class ConfigPanel(Gtk.Window):
         box.pack_start(
             self._float_row(
                 "Base Speed",
-                "...",
+                "The starting speed of the predator.",
                 2.0,
                 12.0,
                 0.1,
@@ -225,7 +231,7 @@ class ConfigPanel(Gtk.Window):
         box.pack_start(
             self._float_row(
                 "Speed per Kill",
-                "...",
+                "How much the predator speeds up after each successful hunt.",
                 0.0,
                 1.0,
                 0.01,
@@ -240,7 +246,7 @@ class ConfigPanel(Gtk.Window):
         box.pack_start(
             self._float_row(
                 "Speed Cap",
-                "...",
+                "The maximum speed the predator can reach.",
                 5.0,
                 20.0,
                 0.5,
@@ -259,7 +265,9 @@ class ConfigPanel(Gtk.Window):
         box.pack_start(self._section_label("Flee & Panic Behaviour"), False, False, 0)
         box.pack_start(
             self._int_row(
-                "Flee Radius X (px)", "...", 50, 600, self._working.flee_radius_x, "flee_radius_x"
+                "Flee Radius X (px)",
+                "Horizontal distance at which people start to run from the predator.",
+                50, 600, self._working.flee_radius_x, "flee_radius_x"
             ),
             False,
             False,
@@ -267,7 +275,9 @@ class ConfigPanel(Gtk.Window):
         )
         box.pack_start(
             self._int_row(
-                "Flee Radius Y (px)", "...", 10, 200, self._working.flee_radius_y, "flee_radius_y"
+                "Flee Radius Y (px)",
+                "Vertical distance at which people start to run from the predator.",
+                10, 200, self._working.flee_radius_y, "flee_radius_y"
             ),
             False,
             False,
@@ -275,7 +285,9 @@ class ConfigPanel(Gtk.Window):
         )
         box.pack_start(
             self._int_row(
-                "Panic Radius (px)", "...", 30, 500, self._working.panic_radius, "panic_radius"
+                "Panic Radius (px)",
+                "Distance at which an alarm signal from a neighbor causes panic.",
+                30, 500, self._working.panic_radius, "panic_radius"
             ),
             False,
             False,
@@ -285,11 +297,11 @@ class ConfigPanel(Gtk.Window):
 
     def _build_visual_tab(self) -> Gtk.Widget:
         box = self._tab_box()
-        box.pack_start(self._section_label("Visual"), False, False, 0)
+        box.pack_start(self._section_label("Visual Settings"), False, False, 0)
         box.pack_start(
             self._int_row(
                 "Kill Effect Frames",
-                "...",
+                "Duration of the red splash effect when a person is caught.",
                 10,
                 180,
                 self._working.kill_effect_ticks,
@@ -303,16 +315,18 @@ class ConfigPanel(Gtk.Window):
 
     def _build_autostart_tab(self) -> Gtk.Widget:
         box = self._tab_box()
-        box.pack_start(self._section_label("Autostart"), False, False, 0)
+        box.pack_start(self._section_label("Desktop Integration"), False, False, 0)
         installed = AUTOSTART_FILE.exists()
         status_text = "Installed" if installed else "Not installed"
         self._autostart_status_lbl = Gtk.Label(xalign=0.0)
         self._autostart_status_lbl.set_markup(f"Status: <b>{status_text}</b>")
         box.pack_start(self._autostart_status_lbl, False, False, 0)
 
+        box.pack_start(Gtk.Label(label="Preview of command line arguments:", xalign=0.0), False, False, 2)
         self._preview_lbl = Gtk.Label(xalign=0.0)
         self._preview_lbl.set_selectable(True)
         self._preview_lbl.set_line_wrap(True)
+        self._preview_lbl.set_margin_start(12)
         box.pack_start(self._preview_lbl, False, False, 10)
         self._refresh_autostart_preview()
 
@@ -358,7 +372,9 @@ class ConfigPanel(Gtk.Window):
         )
         self._adjustments[field_name] = adj
         adj.connect("value-changed", lambda a: self._set(field_name, round(a.get_value(), digits)))
-        return self._scale_row(label, tooltip, adj, digits)
+        row = self._scale_row(label, tooltip, adj, digits)
+        row.set_tooltip_text(tooltip)
+        return row
 
     def _int_row(
         self,
@@ -376,6 +392,7 @@ class ConfigPanel(Gtk.Window):
         self._adjustments[field_name] = adj
         adj.connect("value-changed", lambda a: self._set(field_name, int(a.get_value())))
         row = self._scale_row(label, tooltip, adj, digits=0)
+        row.set_tooltip_text(tooltip)
         if restart_required:
             return self._wrap_restart_note(row)
         return row
@@ -389,6 +406,7 @@ class ConfigPanel(Gtk.Window):
         restart_required: bool = False,
     ) -> Gtk.Widget:
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        row.set_tooltip_text(tooltip)
         lbl = Gtk.Label(label=label, xalign=0.0)
         lbl.set_size_request(200, -1)
         sw = Gtk.Switch()
