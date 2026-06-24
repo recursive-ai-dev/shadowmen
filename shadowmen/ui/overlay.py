@@ -143,21 +143,41 @@ class ShadowMen(Gtk.Window):
             ratio = ke.age / ke.max_age
             alpha = 0.75 * (1.0 - ratio)
             radius = 8 + ratio * 22
+
+            # Glow effect
+            cr.set_source_rgba(0.95, 0.2, 0.1, alpha * 0.3)
+            cr.arc(ke.x, ke.y, radius * 1.5, 0, 2 * math.pi)
+            cr.fill()
+
             cr.set_source_rgba(0.95, 0.06, 0.02, alpha)
             cr.arc(ke.x, ke.y, radius, 0, 2 * math.pi)
             cr.fill()
 
     def _draw_extinction_overlay(self, cr: cairo.Context) -> None:
-        msg = "colony extinct — run with --reset to start fresh"
-        cr.set_font_size(18)
+        msg = "COLONY EXTINCT"
+        sub = "run with --reset to start fresh"
+
         cr.select_font_face("sans-serif", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        extents = cr.text_extents(msg)
+
+        # Draw main message
+        cr.set_font_size(32)
+        ext = cr.text_extents(msg)
+        cr.set_source_rgba(0, 0, 0, 0.6)
+        cr.move_to(self.sw / 2 - ext.width / 2 + 2, self.sh / 2 + 2)
+        cr.show_text(msg)
+        cr.set_source_rgba(0.9, 0.1, 0.1, 0.8)
+        cr.move_to(self.sw / 2 - ext.width / 2, self.sh / 2)
+        cr.show_text(msg)
+
+        # Draw sub message
+        cr.set_font_size(14)
+        ext = cr.text_extents(sub)
         cr.set_source_rgba(0, 0, 0, 0.5)
-        cr.move_to(self.sw / 2 - extents.width / 2 + 2, self.sh / 2 + 2)
-        cr.show_text(msg)
-        cr.set_source_rgba(1, 0.2, 0.2, 0.8)
-        cr.move_to(self.sw / 2 - extents.width / 2, self.sh / 2)
-        cr.show_text(msg)
+        cr.move_to(self.sw / 2 - ext.width / 2 + 1, self.sh / 2 + 30 + 1)
+        cr.show_text(sub)
+        cr.set_source_rgba(0.8, 0.8, 0.8, 0.7)
+        cr.move_to(self.sw / 2 - ext.width / 2, self.sh / 2 + 30)
+        cr.show_text(sub)
 
     def _draw_stats_hud(self, cr: cairo.Context) -> None:
         stats = self.colony.stats()
@@ -165,9 +185,15 @@ class ShadowMen(Gtk.Window):
             return
         cr.set_font_size(11)
         cr.select_font_face("monospace", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+
+        # Subtle background for stats
+        cr.set_source_rgba(0, 0, 0, 0.25)
+        cr.rectangle(5, self.sh - 25, 300, 20)
+        cr.fill()
+
         cr.set_source_rgba(0, 0, 0, 0.6)
         cr.move_to(11, self.sh - 9)
         cr.show_text(stats)
-        cr.set_source_rgba(1, 1, 0.8, 0.55)
+        cr.set_source_rgba(1, 1, 0.8, 0.7)
         cr.move_to(10, self.sh - 10)
         cr.show_text(stats)

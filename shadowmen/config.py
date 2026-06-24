@@ -11,11 +11,12 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 def _get_platform_paths() -> tuple[Path, Path, Path | None]:
+    """Determine OS-specific paths for config, data, and autostart files."""
     home = Path.home()
     if sys.platform == "win32":
         config = Path(os.getenv("APPDATA", str(home / "AppData/Roaming"))) / "shadowmen"
         data = Path(os.getenv("LOCALAPPDATA", str(home / "AppData/Local"))) / "shadowmen"
-        autostart = None # Windows handles autostart via Registry or Startup folder
+        autostart = None
     elif sys.platform == "darwin":
         config = home / "Library/Application Support/shadowmen"
         data = config
@@ -39,6 +40,7 @@ LEGACY_CONFIG = Path.home() / ".shadowmen_config.json"
 LEGACY_SAVE = Path.home() / ".shadowmen_pop.json"
 
 def migrate_legacy_files() -> None:
+    """Migrate configuration and population files from legacy locations to platform-standard directories."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -59,6 +61,7 @@ def migrate_legacy_files() -> None:
 _lock_handle: object | None = None
 
 def acquire_single_instance_lock(path: Path = LOCK_FILE) -> bool:
+    """Attempt to acquire a file lock to ensure only one instance of the application is running."""
     global _lock_handle
     if _lock_handle is not None:
         return True
@@ -94,6 +97,7 @@ def acquire_single_instance_lock(path: Path = LOCK_FILE) -> bool:
 
 @dataclass
 class SimConfig:
+    """Global simulation parameters and configuration settings."""
     population: int = 8
     evo_speed: float = 1.0
     evolve_base_ticks: int = 600
@@ -143,10 +147,12 @@ class SimConfig:
         )
 
     def update_from(self, other: SimConfig) -> None:
+        """Update this configuration with values from another SimConfig instance."""
         for key, val in other.to_dict().items():
             setattr(self, key, val)
 
     def clamp_fields(self) -> None:
+        """Ensure all configuration values are within their allowed ranges."""
         def _ci(name: str, lo: int, hi: int = 1_000_000) -> None:
             v = getattr(self, name)
             c = max(lo, min(hi, v))
@@ -174,11 +180,13 @@ class SimConfig:
             self.pred_speed_cap = self.pred_base_speed
 
     def validate(self) -> list[str]:
+        """Validate configuration settings and return a list of error messages."""
         errors: list[str] = []
         if self.population < 1: errors.append(f"population must be ≥ 1")
         return errors
 
 def load_config(path: Path = CONFIG_FILE) -> SimConfig:
+    """Load simulation configuration from a JSON file."""
     if path.exists():
         try:
             cfg = SimConfig.from_dict(json.loads(path.read_text()))
@@ -188,6 +196,7 @@ def load_config(path: Path = CONFIG_FILE) -> SimConfig:
     return SimConfig()
 
 def save_config(cfg: SimConfig, path: Path = CONFIG_FILE) -> None:
+    """Save simulation configuration to a JSON file."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(cfg.to_dict(), indent=2))

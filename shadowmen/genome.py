@@ -25,6 +25,7 @@ TRAITS: Dict[str, Tuple[float, float, float]] = {
 
 @dataclass
 class Genome:
+    """Genetic representation of a Person, defining its traits and behaviors."""
     walk_speed: float = 2.2
     run_mult: float = 2.4
     scale: float = 18.0
@@ -47,12 +48,14 @@ class Genome:
 
     @classmethod
     def random(cls) -> Genome:
+        """Create a new genome with traits randomly sampled from their allowed ranges."""
         rng = cls._rng
         kwargs = {k: rng.uniform(v[0], v[1]) for k, v in TRAITS.items()}
         return cls(**kwargs)
 
     @classmethod
     def crossover(cls, a: Genome, b: Genome, mutation_rate: float = 0.18) -> Genome:
+        """Create a new offspring genome by combining traits from two parents with potential mutations."""
         rng = cls._rng
         kwargs = {}
         for trait, (lo, hi, _) in TRAITS.items():
@@ -64,7 +67,7 @@ class Genome:
         return cls(**kwargs)
 
     def relatedness(self, other: Genome) -> float:
-        """Calculates normalized genetic similarity [0, 1]."""
+        """Calculate the normalized genetic similarity [0, 1] between two genomes."""
         dist_sq = 0.0
         for trait, (lo, hi, _) in TRAITS.items():
             r = hi - lo
@@ -75,13 +78,16 @@ class Genome:
         return 1.0 / (1.0 + math.sqrt(dist_sq))
 
     def body_color(self) -> Tuple[float, float, float, float]:
+        """Determine the RGBA color of the person's body based on genetic traits."""
         return (max(0.0, min(0.28, 0.04 + self.hue_r)), 0.04, max(0.0, min(0.40, 0.12 + self.hue_b)), 0.95)
 
     def to_dict(self) -> Dict[str, float]:
+        """Convert the genome traits to a dictionary for serialization."""
         return {k: getattr(self, k) for k in TRAITS}
 
     @classmethod
     def from_dict(cls, d: Dict[str, float]) -> Genome:
+        """Create a genome instance from a dictionary of trait values."""
         kwargs = {}
         for k, (lo, hi, default) in TRAITS.items():
             val = d.get(k, default)
@@ -90,28 +96,33 @@ class Genome:
 
 @dataclass
 class PredatorGenome:
+    """Genetic representation of a Predator, defining its hunting capabilities."""
     speed_mult: float = 1.0
     sense_range: float = 600.0
     mutation_rate: float = 0.12
 
     @classmethod
     def random(cls) -> PredatorGenome:
+        """Create a new predator genome with random hunting traits."""
         return cls(
             speed_mult=random.uniform(0.8, 1.2),
             sense_range=random.uniform(400, 1000)
         )
 
     def mutate(self) -> PredatorGenome:
+        """Create a mutated version of this predator genome."""
         return PredatorGenome(
             speed_mult=max(0.5, min(2.0, self.speed_mult + random.gauss(0, 0.05))),
             sense_range=max(200, min(2000, self.sense_range + random.gauss(0, 50))),
         )
 
     def to_dict(self) -> Dict[str, float]:
+        """Convert the predator genome traits to a dictionary."""
         return {"speed_mult": self.speed_mult, "sense_range": self.sense_range}
 
     @classmethod
     def from_dict(cls, d: Dict[str, float]) -> PredatorGenome:
+        """Create a predator genome from a dictionary."""
         return cls(
             speed_mult=float(d.get("speed_mult", 1.0)),
             sense_range=float(d.get("sense_range", 600.0))

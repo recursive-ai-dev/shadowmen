@@ -34,12 +34,14 @@ class SpatialHash:
         self.grid: Dict[Tuple[int, int], List[Any]] = {}
 
     def insert(self, obj: Any, x: float, y: float) -> None:
+        """Insert an object into the spatial hash at the given coordinates."""
         key = (int(x // self.cell_size), int(y // self.cell_size))
         if key not in self.grid:
             self.grid[key] = []
         self.grid[key].append(obj)
 
     def query(self, x: float, y: float, radius: float) -> List[Any]:
+        """Retrieve all objects within the grid cells covered by the given circular radius."""
         results = []
         x_start = int((x - radius) // self.cell_size)
         x_end = int((x + radius) // self.cell_size)
@@ -54,7 +56,7 @@ class SpatialHash:
         return results
 
 def get_windows(sw: int, sh: int) -> List[WindowSnapshot]:
-    """Query OS for visible, reasonably-sized non-fullscreen windows."""
+    """Query the operating system for visible, non-fullscreen windows."""
     if sw < _MIN_SCREEN_DIM or sh < _MIN_SCREEN_DIM:
         return []
 
@@ -66,6 +68,7 @@ def get_windows(sw: int, sh: int) -> List[WindowSnapshot]:
         return _get_windows_linux(sw, sh)
 
 def _get_windows_linux(sw: int, sh: int) -> List[WindowSnapshot]:
+    """Retrieve window geometry on Linux using wmctrl."""
     global _wm_available
     if _wm_available is None:
         with _wm_lock:
@@ -110,6 +113,7 @@ def _get_windows_linux(sw: int, sh: int) -> List[WindowSnapshot]:
     return wins
 
 def _get_windows_win32(sw: int, sh: int) -> List[WindowSnapshot]:
+    """Retrieve window geometry on Windows using pygetwindow."""
     try:
         import pygetwindow as gw
         wins: List[WindowSnapshot] = []
@@ -129,13 +133,12 @@ def _get_windows_win32(sw: int, sh: int) -> List[WindowSnapshot]:
         return []
 
 def _get_windows_darwin(sw: int, sh: int) -> List[WindowSnapshot]:
-    # Placeholder for macOS using Quartz. Requires pyobjc-framework-Quartz
+    """Retrieve window geometry on macOS using Quartz."""
     try:
         from Quartz import CGWindowListCopyWindowInfo, kCGWindowListOptionOnScreenOnly, kCGNullWindowID
         window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
         wins: List[WindowSnapshot] = []
         for w in window_list:
-            # Bounds are in a dict
             bounds = w.get('kCGWindowBounds', {})
             x, y, width, height = bounds.get('X', 0), bounds.get('Y', 0), bounds.get('Width', 0), bounds.get('Height', 0)
             if width < _MIN_WINDOW_SIZE or height < _MIN_WINDOW_SIZE: continue
@@ -153,6 +156,7 @@ def _get_windows_darwin(sw: int, sh: int) -> List[WindowSnapshot]:
         return []
 
 def reset_wm_cache() -> None:
+    """Force re-detection of window manager availability on next query."""
     global _wm_available
     with _wm_lock:
         _wm_available = None
