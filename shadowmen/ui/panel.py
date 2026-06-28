@@ -59,9 +59,12 @@ Exec={cmd}
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
-""")
+""", encoding="utf-8")
         log.info("Autostart installed → %s", AUTOSTART_FILE)
         return True
+    except OSError as e:
+        log.error("Failed to install autostart (OS Error): %s", e)
+        return False
     except Exception as e:
         log.error("Failed to install autostart: %s", e)
         return False
@@ -518,6 +521,9 @@ class ConfigPanel(Gtk.Window):
             self._autostart_status_lbl.set_markup("Status: <b>Installed</b>")
 
     def _on_uninstall_autostart(self, _btn: Gtk.Button) -> None:
-        if AUTOSTART_FILE.exists():
-            AUTOSTART_FILE.unlink()
-            self._autostart_status_lbl.set_markup("Status: <b>Not installed</b>")
+        try:
+            if AUTOSTART_FILE.exists():
+                AUTOSTART_FILE.unlink()
+                self._autostart_status_lbl.set_markup("Status: <b>Not installed</b>")
+        except OSError as e:
+            log.error("Failed to uninstall autostart: %s", e)

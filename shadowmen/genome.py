@@ -89,9 +89,17 @@ class Genome:
     def from_dict(cls, d: Dict[str, float]) -> Genome:
         """Create a genome instance from a dictionary of trait values."""
         kwargs = {}
+        if not isinstance(d, dict):
+            d = {}
         for k, (lo, hi, default) in TRAITS.items():
-            val = d.get(k, default)
-            kwargs[k] = max(lo, min(hi, float(val)))
+            val = d.get(k)
+            if val is None:
+                val = default
+            try:
+                val_float = float(val)
+                kwargs[k] = max(lo, min(hi, val_float))
+            except (ValueError, TypeError):
+                kwargs[k] = default
         return cls(**kwargs)
 
 @dataclass
@@ -123,7 +131,16 @@ class PredatorGenome:
     @classmethod
     def from_dict(cls, d: Dict[str, float]) -> PredatorGenome:
         """Create a predator genome from a dictionary."""
+        if not isinstance(d, dict):
+            d = {}
+
+        def _get_float(key: str, default: float) -> float:
+            val = d.get(key)
+            if val is None: return default
+            try: return float(val)
+            except (ValueError, TypeError): return default
+
         return cls(
-            speed_mult=float(d.get("speed_mult", 1.0)),
-            sense_range=float(d.get("sense_range", 600.0))
+            speed_mult=_get_float("speed_mult", 1.0),
+            sense_range=_get_float("sense_range", 600.0)
         )

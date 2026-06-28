@@ -14,8 +14,15 @@ def _get_platform_paths() -> tuple[Path, Path, Path | None]:
     """Determine OS-specific paths for config, data, and autostart files."""
     home = Path.home()
     if sys.platform == "win32":
-        config = Path(os.getenv("APPDATA", str(home / "AppData/Roaming"))) / "shadowmen"
-        data = Path(os.getenv("LOCALAPPDATA", str(home / "AppData/Local"))) / "shadowmen"
+        appdata = os.getenv("APPDATA")
+        if not appdata:
+            appdata = str(home / "AppData/Roaming")
+        localappdata = os.getenv("LOCALAPPDATA")
+        if not localappdata:
+            localappdata = str(home / "AppData/Local")
+
+        config = Path(appdata) / "shadowmen"
+        data = Path(localappdata) / "shadowmen"
         autostart = None
     elif sys.platform == "darwin":
         config = home / "Library/Application Support/shadowmen"
@@ -23,8 +30,15 @@ def _get_platform_paths() -> tuple[Path, Path, Path | None]:
         autostart = None
     else:
         # Linux / XDG defaults
-        config_root = Path(os.getenv("XDG_CONFIG_HOME", str(home / ".config")))
-        data_root = Path(os.getenv("XDG_DATA_HOME", str(home / ".local/share")))
+        xdg_config = os.getenv("XDG_CONFIG_HOME")
+        if not xdg_config:
+            xdg_config = str(home / ".config")
+        xdg_data = os.getenv("XDG_DATA_HOME")
+        if not xdg_data:
+            xdg_data = str(home / ".local/share")
+
+        config_root = Path(xdg_config)
+        data_root = Path(xdg_data)
         config = config_root / "shadowmen"
         data = data_root / "shadowmen"
         autostart = config_root / "autostart" / "shadowmen.desktop"
@@ -68,7 +82,7 @@ def acquire_single_instance_lock(path: Path = LOCK_FILE) -> bool:
 
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        handle = path.open("a+")
+        handle = path.open("a+", encoding="utf-8")
     except OSError as e:
         log.warning("Could not open lock file %s (%s); skipping single-instance guard.", path, e)
         return True
@@ -88,12 +102,40 @@ def acquire_single_instance_lock(path: Path = LOCK_FILE) -> bool:
             handle.close()
             return False
 
-    handle.seek(0)
-    handle.truncate()
-    handle.write(f"{os.getpid()}\n")
-    handle.flush()
-    _lock_handle = handle
-    return True
+    try:
+        handle.seek(0)
+        handle.truncate()
+        handle.write(f"{os.getpid()}\n")
+        handle.flush()
+        _lock_handle = handle
+        return True
+    except OSError as e:
+        log.warning("Failed to write to lock file: %s", e)
+        handle.close()
+        return False
+
+def release_single_instance_lock() -> None:
+    """Release the previously acquired single instance lock."""
+    global _lock_handle
+    if _lock_handle is not None:
+        try:
+            if sys.platform == "win32":
+                import msvcrt
+                msvcrt.locking(_lock_handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(_lock_handle.fileno(), fcntl.LOCK_UN)
+            _lock_handle.close()
+        except Exception as e:
+            log.warning("Failed to release lock cleanly: %s", e)
+        finally:
+            _lock_handle = None
+            try:
+                if LOCK_FILE.exists():
+                    LOCK_FILE.unlink()
+            except OSError:
+                pass
+
 
 @dataclass
 class SimConfig:
@@ -112,7 +154,7 @@ class SimConfig:
 
     @property
     def evolve_every(self) -> int:
-        return max(1, int(self.evolve_base_ticks / self.evo_speed))
+        return max(1, int(self.evolve_base_ticks / max(0.001, self.evo_speed)))
 
     def to_dict(self) -> dict:
         return {
@@ -132,18 +174,52 @@ class SimConfig:
     @classmethod
     def from_dict(cls, d: dict) -> SimConfig:
         defs = cls()
+        if not isinstance(d, dict):
+            return defs
+
+        def _get_int(key: str, default: int) -> int:
+            val = d.get(key)
+            if val is None:
+                return default
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                return default
+
+        def _get_float(key: str, default: float) -> float:
+            val = d.get(key)
+            if val is None:
+                return default
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return default
+
+        def _get_bool(key: str, default: bool) -> bool:
+            val = d.get(key)
+            if val is None:
+                return default
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, str):
+                return val.lower() in ("true", "1", "yes")
+            try:
+                return bool(val)
+            except (ValueError, TypeError):
+                return default
+
         return cls(
-            population=int(d.get("population", defs.population)),
-            evo_speed=float(d.get("evo_speed", defs.evo_speed)),
-            evolve_base_ticks=int(d.get("evolve_base_ticks", defs.evolve_base_ticks)),
-            use_predator=bool(d.get("use_predator", defs.use_predator)),
-            pred_base_speed=float(d.get("pred_base_speed", defs.pred_base_speed)),
-            pred_speed_inc=float(d.get("pred_speed_inc", defs.pred_speed_inc)),
-            pred_speed_cap=float(d.get("pred_speed_cap", defs.pred_speed_cap)),
-            flee_radius_x=int(d.get("flee_radius_x", defs.flee_radius_x)),
-            flee_radius_y=int(d.get("flee_radius_y", defs.flee_radius_y)),
-            panic_radius=int(d.get("panic_radius", defs.panic_radius)),
-            kill_effect_ticks=int(d.get("kill_effect_ticks", defs.kill_effect_ticks)),
+            population=_get_int("population", defs.population),
+            evo_speed=_get_float("evo_speed", defs.evo_speed),
+            evolve_base_ticks=_get_int("evolve_base_ticks", defs.evolve_base_ticks),
+            use_predator=_get_bool("use_predator", defs.use_predator),
+            pred_base_speed=_get_float("pred_base_speed", defs.pred_base_speed),
+            pred_speed_inc=_get_float("pred_speed_inc", defs.pred_speed_inc),
+            pred_speed_cap=_get_float("pred_speed_cap", defs.pred_speed_cap),
+            flee_radius_x=_get_int("flee_radius_x", defs.flee_radius_x),
+            flee_radius_y=_get_int("flee_radius_y", defs.flee_radius_y),
+            panic_radius=_get_int("panic_radius", defs.panic_radius),
+            kill_effect_ticks=_get_int("kill_effect_ticks", defs.kill_effect_ticks),
         )
 
     def update_from(self, other: SimConfig) -> None:
@@ -189,15 +265,21 @@ def load_config(path: Path = CONFIG_FILE) -> SimConfig:
     """Load simulation configuration from a JSON file."""
     if path.exists():
         try:
-            cfg = SimConfig.from_dict(json.loads(path.read_text()))
+            cfg = SimConfig.from_dict(json.loads(path.read_text(encoding="utf-8")))
             cfg.clamp_fields()
             return cfg
-        except Exception: pass
+        except json.JSONDecodeError as e:
+            log.error("Failed to parse config JSON in %s: %s", path, e)
+        except OSError as e:
+            log.error("Failed to read config file %s: %s", path, e)
+        except Exception as e:
+            log.error("Unexpected error loading config from %s: %s", path, e)
     return SimConfig()
 
 def save_config(cfg: SimConfig, path: Path = CONFIG_FILE) -> None:
     """Save simulation configuration to a JSON file."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(cfg.to_dict(), indent=2))
-    except OSError: pass
+        path.write_text(json.dumps(cfg.to_dict(), indent=2), encoding="utf-8")
+    except OSError as e:
+        log.error("Failed to save config to %s: %s", path, e)

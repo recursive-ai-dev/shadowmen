@@ -46,7 +46,10 @@ class ShadowMen(Gtk.Window):
         self.set_keep_above(True)
         self.resize(self.sw, self.sh)
         self.move(0, 0)
-        self.input_shape_combine_region(cairo.Region())  # type: ignore
+        try:
+            self.input_shape_combine_region(cairo.Region())  # type: ignore
+        except Exception as e:
+            log.warning("Failed to make window input-transparent: %s", e)
 
         area = Gtk.DrawingArea()
         area.connect("draw", self._on_draw)
@@ -70,7 +73,8 @@ class ShadowMen(Gtk.Window):
             icon.set_tooltip_text("Shadow Men — click to configure")
             icon.connect("activate", lambda _: self.open_config_panel())
             self._tray_icon = icon
-        except Exception:
+        except Exception as e:
+            log.warning("Failed to initialize tray icon: %s", e)
             self._tray_icon = None
 
     def open_config_panel(self) -> None:
@@ -140,6 +144,7 @@ class ShadowMen(Gtk.Window):
 
     def _draw_kill_effects(self, cr: cairo.Context) -> None:
         for ke in self.colony.kill_effects:
+            if ke.max_age <= 0: continue
             ratio = ke.age / ke.max_age
             alpha = 0.75 * (1.0 - ratio)
             radius = 8 + ratio * 22

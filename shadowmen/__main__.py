@@ -24,6 +24,7 @@ from shadowmen.config import (
     SAVE_FILE,
     SimConfig,
     acquire_single_instance_lock,
+    release_single_instance_lock,
     load_config,
     migrate_legacy_files,
     save_config,
@@ -87,12 +88,15 @@ def main() -> None:
 
     if args.install_autostart:
         install_autostart(cfg)
-        return
+        sys.exit(0)
 
     if args.reset:
-        if SAVE_FILE.exists():
-            SAVE_FILE.unlink()
-        log.info("Population reset.")
+        try:
+            if SAVE_FILE.exists():
+                SAVE_FILE.unlink()
+            log.info("Population reset.")
+        except OSError as e:
+            log.warning("Failed to reset population file: %s", e)
 
     if args.config_panel:
         def _on_apply(c: SimConfig, restart: bool) -> None:
@@ -101,25 +105,34 @@ def main() -> None:
                 log.info("Settings applied.")
         panel = ConfigPanel(cfg, on_apply=_on_apply)
         panel.connect("destroy", Gtk.main_quit)
-        Gtk.main()
-        return
+        try:
+            Gtk.main()
+        except KeyboardInterrupt:
+            pass
+        sys.exit(0)
 
     if not acquire_single_instance_lock():
         sys.exit("Shadow Men is already running — only one instance can run at a time.")
 
-    app = ShadowMen(cfg)
+    try:
+        app = ShadowMen(cfg)
 
-    def _quit(*_: object) -> None:
-        app.colony.save()
-        Gtk.main_quit()
+        def _quit(*_: object) -> None:
+            app.colony.save()
+            Gtk.main_quit()
 
-    if sys.platform != "win32":
-        signal.signal(signal.SIGINT, _quit)
-        signal.signal(signal.SIGTERM, _quit)
+        if sys.platform != "win32":
+            signal.signal(signal.SIGINT, _quit)
+            signal.signal(signal.SIGTERM, _quit)
 
-    GLib.timeout_add(200, lambda: True)
+        GLib.timeout_add(200, lambda: True)
 
-    Gtk.main()
+        try:
+            Gtk.main()
+        except KeyboardInterrupt:
+            _quit()
+    finally:
+        release_single_instance_lock()
 
 
 if __name__ == "__main__":
