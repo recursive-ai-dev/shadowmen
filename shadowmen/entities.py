@@ -45,7 +45,7 @@ class Person:
             self.home_x, self.home_y = home_x, home_y
             self.has_shelter = True
         else:
-            self.x = float(random.randint(int(s * 2), int(sw - s * 2)))
+            self.x = float(random.randint(int(s * 2), max(int(s * 2), int(sw - s * 2))))
             self.y = float(sh - s * 0.3)
             self.home_x, self.home_y = None, None
             self.has_shelter = False
@@ -256,6 +256,7 @@ class Predator:
         self.x, self.y = float(sw // 2), float(sh - self.SCALE * 0.3)
         self.speed = config.pred_base_speed * self.genome.speed_mult
         self.vx, self.vy, self.facing, self.state, self.t, self.kills = self.speed, 0.0, 1, "run", 0.0, 0
+        self.floor_y = self.y
 
     def update(self, people: List[Person], windows: List[WindowSnapshot]) -> None:
         self.t += 1
@@ -291,15 +292,18 @@ class Colony:
     def _load_or_init(self) -> List[Person]:
         if SAVE_FILE.exists():
             try:
-                data = json.loads(SAVE_FILE.read_text())
+                data = json.loads(SAVE_FILE.read_text(encoding="utf-8"))
                 self.generation = int(data.get("generation", 0))
                 people = [Person(self.sw, self.sh, Genome.from_dict(d["genome"]), d.get("home_x"), d.get("home_y")) for d in data.get("people", [])]
-                if "predator_genome" in data and self.predator:
+                if "predator_genome" in data and data["predator_genome"] and self.predator:
                     self.predator.genome = PredatorGenome.from_dict(data["predator_genome"])
                     self.predator.speed = self.config.pred_base_speed * self.predator.genome.speed_mult
                 while len(people) < self.count: people.append(Person(self.sw, self.sh))
                 return people[:self.count]
-            except: pass
+            except json.JSONDecodeError as e:
+                log.error("Failed to parse population JSON: %s", e)
+            except Exception as e:
+                log.error("Unexpected error loading population: %s", e)
         return [Person(self.sw, self.sh) for _ in range(self.count)]
 
     def save(self) -> None:
@@ -310,8 +314,11 @@ class Colony:
                 "predator_genome": self.predator.genome.to_dict() if self.predator else None
             }, indent=2)
             SAVE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            SAVE_FILE.write_text(payload)
-        except: pass
+            SAVE_FILE.write_text(payload, encoding="utf-8")
+        except OSError as e:
+            log.error("Failed to save population to %s: %s", SAVE_FILE, e)
+        except Exception as e:
+            log.error("Unexpected error saving population: %s", e)
 
     def tick(self, windows: List[WindowSnapshot]) -> None:
         self.tick_n += 1
@@ -324,7 +331,9 @@ class Colony:
         if self.predator: self._handle_predator(windows, shash)
         for ke in self.kill_effects: ke.age += 1
         self.kill_effects = [ke for ke in self.kill_effects if ke.age < ke.max_age]
-        if self.tick_n % self.config.evolve_every == 0: self._evolve(); self.save()
+        if self.config.evolve_every > 0 and self.tick_n % self.config.evolve_every == 0:
+            self._evolve()
+            self.save()
 
     def _handle_interactions(self, shash: SpatialHash) -> None:
         for a in self.people:
@@ -364,10 +373,13 @@ class Colony:
                 p.state, p.vx = "run", (-1 if pred.x > p.x else 1) * p.genome.walk_speed * p.genome.run_mult
 
         catch_r = pred.catch_radius()
-        for p in list(self.people):
+        # Create a copy for safe iteration while removing
+        people_copy = list(self.people)
+        for p in people_copy:
             if math.hypot(p.x - pred.x, p.y - pred.y) < catch_r:
                 self.kill_effects.append(KillEffect(p.x, p.y))
-                self.people.remove(p)
+                if p in self.people:
+                    self.people.remove(p)
                 pred.on_kill()
                 self._spawn_replacement(pred)
 

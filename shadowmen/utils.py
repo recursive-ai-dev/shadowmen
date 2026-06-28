@@ -88,11 +88,23 @@ def _get_windows_linux(sw: int, sh: int) -> List[WindowSnapshot]:
             text=True,
             stderr=subprocess.DEVNULL,
             timeout=_WM_TIMEOUT,
+            encoding="utf-8",
+            errors="replace"
         )
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError):
+    except subprocess.TimeoutExpired:
+        log.warning("wmctrl timed out after %.1f seconds", _WM_TIMEOUT)
+        return []
+    except subprocess.CalledProcessError as e:
+        log.warning("wmctrl returned non-zero exit status %s", e.returncode)
+        return []
+    except OSError as e:
+        log.warning("Failed to execute wmctrl: %s", e)
         return []
 
     wins: List[WindowSnapshot] = []
+    if not raw:
+        return wins
+
     for line in raw.splitlines():
         parts = line.split(None, 6)
         if len(parts) < 6: continue
@@ -118,7 +130,7 @@ def _get_windows_win32(sw: int, sh: int) -> List[WindowSnapshot]:
         import pygetwindow as gw
         wins: List[WindowSnapshot] = []
         for w in gw.getAllWindows():
-            if not w.visible or w.isMinimized or w.title == "": continue
+            if not w.visible or w.isMinimized or not w.title: continue
             if w.width < _MIN_WINDOW_SIZE or w.height < _MIN_WINDOW_SIZE: continue
             if w.width >= sw - _FULLSCREEN_MARGIN and w.height >= sh - _FULLSCREEN_MARGIN: continue
 
@@ -137,10 +149,17 @@ def _get_windows_darwin(sw: int, sh: int) -> List[WindowSnapshot]:
     try:
         from Quartz import CGWindowListCopyWindowInfo, kCGWindowListOptionOnScreenOnly, kCGNullWindowID
         window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
+        if not window_list:
+            return []
+
         wins: List[WindowSnapshot] = []
         for w in window_list:
             bounds = w.get('kCGWindowBounds', {})
-            x, y, width, height = bounds.get('X', 0), bounds.get('Y', 0), bounds.get('Width', 0), bounds.get('Height', 0)
+            x = bounds.get('X', 0)
+            y = bounds.get('Y', 0)
+            width = bounds.get('Width', 0)
+            height = bounds.get('Height', 0)
+
             if width < _MIN_WINDOW_SIZE or height < _MIN_WINDOW_SIZE: continue
             if width >= sw - _FULLSCREEN_MARGIN and height >= sh - _FULLSCREEN_MARGIN: continue
 
