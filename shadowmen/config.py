@@ -179,23 +179,34 @@ class SimConfig:
 
         def _get_int(key: str, default: int) -> int:
             val = d.get(key)
-            if val is None: return default
-            try: return int(val)
-            except (ValueError, TypeError): return default
+            if val is None:
+                return default
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                return default
 
         def _get_float(key: str, default: float) -> float:
             val = d.get(key)
-            if val is None: return default
-            try: return float(val)
-            except (ValueError, TypeError): return default
+            if val is None:
+                return default
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return default
 
         def _get_bool(key: str, default: bool) -> bool:
             val = d.get(key)
-            if val is None: return default
-            if isinstance(val, bool): return val
-            if isinstance(val, str): return val.lower() in ("true", "1", "yes")
-            try: return bool(val)
-            except (ValueError, TypeError): return default
+            if val is None:
+                return default
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, str):
+                return val.lower() in ("true", "1", "yes")
+            try:
+                return bool(val)
+            except (ValueError, TypeError):
+                return default
 
         return cls(
             population=_get_int("population", defs.population),
