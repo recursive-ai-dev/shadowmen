@@ -4,12 +4,14 @@ from shadowmen.config import SimConfig
 from shadowmen.genome import Genome
 from shadowmen.utils import SpatialHash
 
+
 def test_person_exhaustion():
     p = Person(1000, 1000)
     p.energy = 0
     p.update([])
     assert p.state == "crouch"
     assert p.vx == 0
+
 
 def test_person_run_burst():
     # Force a genome with high run_prob and low others
@@ -20,12 +22,14 @@ def test_person_run_burst():
     assert p.state == "run"
     assert abs(p.vx) > g.walk_speed
 
+
 def test_person_fire_trigger():
     g = Genome(fire_skill=1.0, sit_prob=0, wave_prob=0, run_prob=0, shelter_skill=0)
     p = Person(1000, 1000, genome=g)
     p.update([])
     assert p.fire_timer > 0
     assert p.state == "crouch"
+
 
 def test_colony_interaction_radius():
     cfg = SimConfig(population=2)
@@ -37,7 +41,7 @@ def test_colony_interaction_radius():
     p1 = Person(1000, 1000, genome=g1)
     p2 = Person(1000, 1000, genome=g2)
     p1.x, p1.y = 500, 500
-    p2.x, p2.y = 600, 500 # 100px apart
+    p2.x, p2.y = 600, 500  # 100px apart
 
     colony.people = [p1, p2]
 
@@ -46,7 +50,7 @@ def test_colony_interaction_radius():
 
     p1.energy = 100
     p2.energy = 30
-    p1.genome = p2.genome # Ensure relatedness
+    p1.genome = p2.genome  # Ensure relatedness
 
     shash = SpatialHash()
     shash.insert(p1, p1.x, p1.y)

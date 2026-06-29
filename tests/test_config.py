@@ -4,16 +4,19 @@ import pytest
 import shadowmen.config as config_mod
 from shadowmen.config import SimConfig, acquire_single_instance_lock
 
+
 def test_config_defaults():
     cfg = SimConfig()
     assert cfg.population == 8
     assert cfg.use_predator is False
+
 
 def test_config_validation():
     cfg = SimConfig(population=0)
     errors = cfg.validate()
     assert len(errors) > 0
     assert "population must be ≥ 1" in errors[0]
+
 
 def test_config_to_from_dict():
     cfg = SimConfig(population=20, use_predator=True)

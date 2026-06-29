@@ -42,12 +42,14 @@ class Person:
 
         if home_x is not None and home_y is not None:
             self.x, self.y = home_x, home_y
-            self.home_x, self.home_y = home_x, home_y
+            self.home_x: float | None = home_x
+            self.home_y: float | None = home_y
             self.has_shelter = True
         else:
             self.x = float(random.randint(int(s * 2), max(int(s * 2), int(sw - s * 2))))
             self.y = float(sh - s * 0.3)
-            self.home_x, self.home_y = None, None
+            self.home_x = None
+            self.home_y = None
             self.has_shelter = False
 
         self.floor_y = self.y
@@ -116,7 +118,7 @@ class Person:
     def draw(self, cr: cairo.Context) -> None:
         g, s = self.genome, self.genome.scale
         if self.has_shelter and self.home_x is not None:
-            draw_shelter(cr, self.home_x, self.home_y, s)
+            draw_shelter(cr, self.home_x or 0.0, self.home_y or 0.0, s)
         if self.fire_timer > 0:
             draw_fire(cr, self.fire_x, self.fire_y, self.t, s)
 
@@ -285,7 +287,8 @@ class Predator:
 class Colony:
     """A collection of evolving Person agents and an optional Predator."""
     def __init__(self, count: int, sw: int, sh: int, *, config: SimConfig) -> None:
-        self.config, self.count, self.sw, self.sh, self.tick_n, self.generation, self.kill_effects = config, count, sw, sh, 0, 0, []
+        self.config, self.count, self.sw, self.sh, self.tick_n, self.generation = config, count, sw, sh, 0, 0
+        self.kill_effects: list[KillEffect] = []
         self.predator = Predator(sw, sh, config) if config.use_predator else None
         self.people = self._load_or_init()
 
@@ -412,7 +415,7 @@ class Colony:
             loser.state = "walk"
         for p in self.people: p.genome.fitness = 0
 
-    def react_to_windows(self, old_wins, new_wins) -> None:
+    def react_to_windows(self, old_wins: list[WindowSnapshot], new_wins: list[WindowSnapshot]) -> None:
         gone = {w.id for w in old_wins} - {w.id for w in new_wins}
         for p in self.people:
             for win in old_wins:

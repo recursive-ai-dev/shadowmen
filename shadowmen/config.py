@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 import json
 import logging
@@ -9,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
 
 def _get_platform_paths() -> tuple[Path, Path, Path | None]:
     """Determine OS-specific paths for config, data, and autostart files."""
@@ -45,6 +47,7 @@ def _get_platform_paths() -> tuple[Path, Path, Path | None]:
 
     return config, data, autostart
 
+
 CONFIG_DIR, DATA_DIR, AUTOSTART_FILE = _get_platform_paths()
 CONFIG_FILE = CONFIG_DIR / "config.json"
 SAVE_FILE = DATA_DIR / "population.json"
@@ -52,6 +55,7 @@ LOCK_FILE = DATA_DIR / "shadowmen.lock"
 
 LEGACY_CONFIG = Path.home() / ".shadowmen_config.json"
 LEGACY_SAVE = Path.home() / ".shadowmen_pop.json"
+
 
 def migrate_legacy_files() -> None:
     """Migrate configuration and population files from legacy locations to platform-standard directories."""
@@ -72,7 +76,9 @@ def migrate_legacy_files() -> None:
         except OSError as e:
             log.warning("Failed to migrate population: %s", e)
 
-_lock_handle: object | None = None
+
+_lock_handle: Any = None
+
 
 def acquire_single_instance_lock(path: Path = LOCK_FILE) -> bool:
     """Attempt to acquire a file lock to ensure only one instance of the application is running."""
@@ -84,19 +90,23 @@ def acquire_single_instance_lock(path: Path = LOCK_FILE) -> bool:
         path.parent.mkdir(parents=True, exist_ok=True)
         handle = path.open("a+", encoding="utf-8")
     except OSError as e:
-        log.warning("Could not open lock file %s (%s); skipping single-instance guard.", path, e)
+        log.warning(
+            "Could not open lock file %s (%s); skipping single-instance guard.", path, e
+        )
         return True
 
     if sys.platform == "win32":
         try:
             import msvcrt
+
             msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        except (ImportError, OSError, IOError):
+        except (ImportError, OSError):
             handle.close()
             return False
     else:
         try:
             import fcntl
+
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except (ImportError, BlockingIOError, OSError):
             handle.close()
@@ -114,6 +124,7 @@ def acquire_single_instance_lock(path: Path = LOCK_FILE) -> bool:
         handle.close()
         return False
 
+
 def release_single_instance_lock() -> None:
     """Release the previously acquired single instance lock."""
     global _lock_handle
@@ -121,9 +132,11 @@ def release_single_instance_lock() -> None:
         try:
             if sys.platform == "win32":
                 import msvcrt
+
                 msvcrt.locking(_lock_handle.fileno(), msvcrt.LK_UNLCK, 1)
             else:
                 import fcntl
+
                 fcntl.flock(_lock_handle.fileno(), fcntl.LOCK_UN)
             _lock_handle.close()
         except Exception as e:
@@ -140,6 +153,7 @@ def release_single_instance_lock() -> None:
 @dataclass
 class SimConfig:
     """Global simulation parameters and configuration settings."""
+
     population: int = 8
     evo_speed: float = 1.0
     evolve_base_ticks: int = 600
@@ -229,6 +243,7 @@ class SimConfig:
 
     def clamp_fields(self) -> None:
         """Ensure all configuration values are within their allowed ranges."""
+
         def _ci(name: str, lo: int, hi: int = 1_000_000) -> None:
             v = getattr(self, name)
             c = max(lo, min(hi, v))
@@ -258,8 +273,10 @@ class SimConfig:
     def validate(self) -> list[str]:
         """Validate configuration settings and return a list of error messages."""
         errors: list[str] = []
-        if self.population < 1: errors.append(f"population must be ≥ 1")
+        if self.population < 1:
+            errors.append("population must be ≥ 1")
         return errors
+
 
 def load_config(path: Path = CONFIG_FILE) -> SimConfig:
     """Load simulation configuration from a JSON file."""
@@ -275,6 +292,7 @@ def load_config(path: Path = CONFIG_FILE) -> SimConfig:
         except Exception as e:
             log.error("Unexpected error loading config from %s: %s", path, e)
     return SimConfig()
+
 
 def save_config(cfg: SimConfig, path: Path = CONFIG_FILE) -> None:
     """Save simulation configuration to a JSON file."""
