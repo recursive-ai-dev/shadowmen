@@ -7,9 +7,11 @@ from shadowmen.genome import Genome
 from shadowmen.config import SimConfig
 from shadowmen.utils import WindowSnapshot, SpatialHash
 
+
 @pytest.fixture
 def config():
     return SimConfig()
+
 
 def test_person_init_random():
     p = Person(1920, 1080)
@@ -18,6 +20,7 @@ def test_person_init_random():
     assert p.x <= 1920 - p.genome.scale
     assert p.has_shelter is False
 
+
 def test_person_init_home():
     p = Person(1920, 1080, home_x=500, home_y=500)
     assert p.x == 500
@@ -25,6 +28,7 @@ def test_person_init_home():
     assert p.home_x == 500
     assert p.home_y == 500
     assert p.has_shelter is True
+
 
 def test_person_update_walk(config):
     # Fix seed to ensure predictable velocity
@@ -37,32 +41,35 @@ def test_person_update_walk(config):
         assert p.x == pytest.approx(initial_x + p.vx)
         assert p.genome.fitness > 0
 
+
 def test_person_climb_logic():
     p = Person(1920, 1080)
     p._begin_climb(100.0, 1)
     assert p.state == "climb"
     assert p.wall_x == 100.0
     assert p.wall_side == 1
-    
+
     initial_y = p.y
     p.update([])
     assert p.y == initial_y - 2.5
     assert p.x == 100.0 + (-1) * p.genome.scale * 0.92
+
 
 def test_person_fall_to_floor():
     p = Person(1920, 1080)
     p.y = 500
     p.state = "fall"
     p.vy = 0
-    p.update([]) # Apply gravity
+    p.update([])  # Apply gravity
     assert p.vy == 0.65
     assert p.y == 500.65
-    
+
     # Fast forward to floor
     p.y = 1080 - p.genome.scale * 0.3 - 0.1
     p.update([])
     assert p.state == "walk"
     assert p.y == 1080 - p.genome.scale * 0.3
+
 
 def test_person_boundary_collision():
     p = Person(1920, 1080)
@@ -77,18 +84,20 @@ def test_person_boundary_collision():
         assert p.vx == 2.0
         assert p.facing == 1
 
+
 def test_predator_hunt(config):
     pred = Predator(1920, 1080, config)
     p = Person(1920, 1080)
     p.x = pred.x + 100
     p.y = pred.y
-    
+
     pred.update([p], [])
-    assert pred.vx > 0 # Moving towards person
-    
+    assert pred.vx > 0  # Moving towards person
+
     pred.x = p.x + 100
     pred.update([p], [])
-    assert pred.vx < 0 # Moving towards person
+    assert pred.vx < 0  # Moving towards person
+
 
 def test_predator_on_kill(config):
     pred = Predator(1920, 1080, config)
@@ -97,16 +106,18 @@ def test_predator_on_kill(config):
     assert pred.kills == 1
     assert pred.speed == initial_speed + config.pred_speed_inc
 
+
 def test_colony_save_load(config, tmp_path):
     save_file = tmp_path / "save.json"
     with patch("shadowmen.entities.SAVE_FILE", save_file):
         colony = Colony(5, 1920, 1080, config=config)
         colony.save()
         assert save_file.exists()
-        
+
         colony2 = Colony(5, 1920, 1080, config=config)
         assert len(colony2.people) == 5
         assert colony2.generation == 0
+
 
 def test_colony_evolve(config, tmp_path):
     # Isolate save file
@@ -116,13 +127,14 @@ def test_colony_evolve(config, tmp_path):
         colony.generation = 0
         for p in colony.people:
             p.genome.fitness = 10.0
-        colony.people[0].genome.fitness = 100.0 # Clear winner
-        
+        colony.people[0].genome.fitness = 100.0  # Clear winner
+
         colony._evolve()
         assert colony.generation == 1
         # Check that fitness was reset
         for p in colony.people:
             assert p.genome.fitness == 0.0
+
 
 def test_colony_interactions(config):
     colony = Colony(2, 1920, 1080, config=config)
@@ -133,7 +145,7 @@ def test_colony_interactions(config):
     a.state = b.state = "walk"
     a.energy = 100
     b.energy = 20
-    
+
     # Ensure they are kin
     a.genome = Genome()
     b.genome = Genome()
@@ -147,16 +159,17 @@ def test_colony_interactions(config):
     assert a.energy < 100
     assert b.energy > 20
 
+
 def test_colony_react_to_windows(config):
     colony = Colony(1, 1920, 1080, config=config)
     p = colony.people[0]
     p.x = 100
     p.y = p.floor_y = 500
     p.state = "idle"
-    
+
     old_wins = [WindowSnapshot(90, 500, 100, 20, "win1")]
-    new_wins = [] # Window closed
-    
+    new_wins = []  # Window closed
+
     colony.react_to_windows(old_wins, new_wins)
     assert p.state == "jump"
     assert p.vy < 0

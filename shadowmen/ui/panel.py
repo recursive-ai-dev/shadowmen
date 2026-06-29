@@ -48,10 +48,12 @@ def _autostart_args(cfg: SimConfig) -> str:
 
 def install_autostart(cfg: SimConfig) -> bool:
     try:
-        AUTOSTART_FILE.parent.mkdir(parents=True, exist_ok=True)
+        if AUTOSTART_FILE:
+            AUTOSTART_FILE.parent.mkdir(parents=True, exist_ok=True)
         args = _autostart_args(cfg)
         cmd = "shadowmen" + (f" {args}" if args else "")
-        AUTOSTART_FILE.write_text(f"""[Desktop Entry]
+        if AUTOSTART_FILE: AUTOSTART_FILE.write_text(
+            f"""[Desktop Entry]
 Type=Application
 Name=Shadow Men
 Comment=Evolving shadow people desktop widget
@@ -59,7 +61,9 @@ Exec={cmd}
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
         log.info("Autostart installed → %s", AUTOSTART_FILE)
         return True
     except OSError as e:
@@ -154,7 +158,11 @@ class ConfigPanel(Gtk.Window):
             self._int_row(
                 "Population",
                 "Initial number of people in the colony.",
-                1, 200, self._working.population, "population", True
+                1,
+                200,
+                self._working.population,
+                "population",
+                True,
             ),
             False,
             False,
@@ -164,7 +172,12 @@ class ConfigPanel(Gtk.Window):
             self._float_row(
                 "Evo Speed ×",
                 "Evolution speed multiplier. Higher values accelerate selection.",
-                0.25, 10.0, 0.25, 2, self._working.evo_speed, "evo_speed"
+                0.25,
+                10.0,
+                0.25,
+                2,
+                self._working.evo_speed,
+                "evo_speed",
             ),
             False,
             False,
@@ -184,7 +197,9 @@ class ConfigPanel(Gtk.Window):
             2,
         )
 
-        box.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 10)
+        box.pack_start(
+            Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 10
+        )
         box.pack_start(self._section_label("Evolution History"), False, False, 0)
         desc = Gtk.Label(xalign=0.0)
         desc.set_line_wrap(True)
@@ -210,7 +225,9 @@ class ConfigPanel(Gtk.Window):
             self._bool_row(
                 "Enable Predator",
                 "Introduce a red predator that hunts people to start an arms race.",
-                self._working.use_predator, "use_predator", True
+                self._working.use_predator,
+                "use_predator",
+                True,
             ),
             False,
             False,
@@ -270,7 +287,10 @@ class ConfigPanel(Gtk.Window):
             self._int_row(
                 "Flee Radius X (px)",
                 "Horizontal distance at which people start to run from the predator.",
-                50, 600, self._working.flee_radius_x, "flee_radius_x"
+                50,
+                600,
+                self._working.flee_radius_x,
+                "flee_radius_x",
             ),
             False,
             False,
@@ -280,7 +300,10 @@ class ConfigPanel(Gtk.Window):
             self._int_row(
                 "Flee Radius Y (px)",
                 "Vertical distance at which people start to run from the predator.",
-                10, 200, self._working.flee_radius_y, "flee_radius_y"
+                10,
+                200,
+                self._working.flee_radius_y,
+                "flee_radius_y",
             ),
             False,
             False,
@@ -290,7 +313,10 @@ class ConfigPanel(Gtk.Window):
             self._int_row(
                 "Panic Radius (px)",
                 "Distance at which an alarm signal from a neighbor causes panic.",
-                30, 500, self._working.panic_radius, "panic_radius"
+                30,
+                500,
+                self._working.panic_radius,
+                "panic_radius",
             ),
             False,
             False,
@@ -319,13 +345,18 @@ class ConfigPanel(Gtk.Window):
     def _build_autostart_tab(self) -> Gtk.Widget:
         box = self._tab_box()
         box.pack_start(self._section_label("Desktop Integration"), False, False, 0)
-        installed = AUTOSTART_FILE.exists()
+        installed = AUTOSTART_FILE.exists() if AUTOSTART_FILE else False
         status_text = "Installed" if installed else "Not installed"
         self._autostart_status_lbl = Gtk.Label(xalign=0.0)
         self._autostart_status_lbl.set_markup(f"Status: <b>{status_text}</b>")
         box.pack_start(self._autostart_status_lbl, False, False, 0)
 
-        box.pack_start(Gtk.Label(label="Preview of command line arguments:", xalign=0.0), False, False, 2)
+        box.pack_start(
+            Gtk.Label(label="Preview of command line arguments:", xalign=0.0),
+            False,
+            False,
+            2,
+        )
         self._preview_lbl = Gtk.Label(xalign=0.0)
         self._preview_lbl.set_selectable(True)
         self._preview_lbl.set_line_wrap(True)
@@ -374,7 +405,10 @@ class ConfigPanel(Gtk.Window):
             page_size=0,
         )
         self._adjustments[field_name] = adj
-        adj.connect("value-changed", lambda a: self._set(field_name, round(a.get_value(), digits)))
+        adj.connect(
+            "value-changed",
+            lambda a: self._set(field_name, round(a.get_value(), digits)),
+        )
         row = self._scale_row(label, tooltip, adj, digits)
         row.set_tooltip_text(tooltip)
         return row
@@ -390,10 +424,17 @@ class ConfigPanel(Gtk.Window):
         restart_required: bool = False,
     ) -> Gtk.Widget:
         adj = Gtk.Adjustment(
-            value=initial, lower=lo, upper=hi, step_increment=1, page_increment=10, page_size=0
+            value=initial,
+            lower=lo,
+            upper=hi,
+            step_increment=1,
+            page_increment=10,
+            page_size=0,
         )
         self._adjustments[field_name] = adj
-        adj.connect("value-changed", lambda a: self._set(field_name, int(a.get_value())))
+        adj.connect(
+            "value-changed", lambda a: self._set(field_name, int(a.get_value()))
+        )
         row = self._scale_row(label, tooltip, adj, digits=0)
         row.set_tooltip_text(tooltip)
         if restart_required:
@@ -426,14 +467,18 @@ class ConfigPanel(Gtk.Window):
             row.pack_start(note, False, False, 0)
         return row
 
-    def _scale_row(self, label: str, tooltip: str, adj: Gtk.Adjustment, digits: int) -> Gtk.Box:
+    def _scale_row(
+        self, label: str, tooltip: str, adj: Gtk.Adjustment, digits: int
+    ) -> Gtk.Box:
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         lbl = Gtk.Label(label=label, xalign=0.0)
         lbl.set_size_request(200, -1)
         scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=adj)
         scale.set_hexpand(True)
         scale.set_draw_value(False)
-        spin = Gtk.SpinButton(adjustment=adj, climb_rate=adj.get_step_increment(), digits=digits)
+        spin = Gtk.SpinButton(
+            adjustment=adj, climb_rate=adj.get_step_increment(), digits=digits
+        )
         spin.set_size_request(90, -1)
         row.pack_start(lbl, False, False, 0)
         row.pack_start(scale, True, True, 0)
@@ -522,7 +567,7 @@ class ConfigPanel(Gtk.Window):
 
     def _on_uninstall_autostart(self, _btn: Gtk.Button) -> None:
         try:
-            if AUTOSTART_FILE.exists():
+            if AUTOSTART_FILE and AUTOSTART_FILE.exists():
                 AUTOSTART_FILE.unlink()
                 self._autostart_status_lbl.set_markup("Status: <b>Not installed</b>")
         except OSError as e:

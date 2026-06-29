@@ -6,9 +6,11 @@ import os
 import signal
 import sys
 
+
 def check_dependencies() -> None:
     try:
         import gi
+
         gi.require_version("Gtk", "3.0")
     except ImportError:
         if sys.platform == "win32":
@@ -19,14 +21,17 @@ def check_dependencies() -> None:
             msg = "Install: sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0"
         sys.exit(f"GTK 3 not found. {msg}")
 
+
+import contextlib
+
 from shadowmen import __version__
 from shadowmen.config import (
     SAVE_FILE,
     SimConfig,
     acquire_single_instance_lock,
-    release_single_instance_lock,
     load_config,
     migrate_legacy_files,
+    release_single_instance_lock,
     save_config,
 )
 
@@ -41,6 +46,7 @@ log = logging.getLogger(__name__)
 def main() -> None:
     check_dependencies()
     from gi.repository import GLib, Gtk
+
     from shadowmen.ui.overlay import ShadowMen
     from shadowmen.ui.panel import ConfigPanel, install_autostart
 
@@ -70,21 +76,34 @@ def main() -> None:
             and not os.environ.get("WAYLAND_DISPLAY")
             and not args.install_autostart
         ):
-            sys.exit("No display detected. Run this on a desktop session with a display server.")
+            sys.exit(
+                "No display detected. Run this on a desktop session with a display server."
+            )
 
     cfg = load_config()
 
-    if args.count: cfg.population = args.count
-    if args.predator: cfg.use_predator = True
-    if args.evo_speed: cfg.evo_speed = args.evo_speed
-    if args.evolve_every: cfg.evolve_base_ticks = args.evolve_every
-    if args.flee_radius_x: cfg.flee_radius_x = args.flee_radius_x
-    if args.flee_radius_y: cfg.flee_radius_y = args.flee_radius_y
-    if args.panic_radius: cfg.panic_radius = args.panic_radius
-    if args.pred_base_speed: cfg.pred_base_speed = args.pred_base_speed
-    if args.pred_speed_inc: cfg.pred_speed_inc = args.pred_speed_inc
-    if args.pred_speed_cap: cfg.pred_speed_cap = args.pred_speed_cap
-    if args.kill_effect_ticks: cfg.kill_effect_ticks = args.kill_effect_ticks
+    if args.count:
+        cfg.population = args.count
+    if args.predator:
+        cfg.use_predator = True
+    if args.evo_speed:
+        cfg.evo_speed = args.evo_speed
+    if args.evolve_every:
+        cfg.evolve_base_ticks = args.evolve_every
+    if args.flee_radius_x:
+        cfg.flee_radius_x = args.flee_radius_x
+    if args.flee_radius_y:
+        cfg.flee_radius_y = args.flee_radius_y
+    if args.panic_radius:
+        cfg.panic_radius = args.panic_radius
+    if args.pred_base_speed:
+        cfg.pred_base_speed = args.pred_base_speed
+    if args.pred_speed_inc:
+        cfg.pred_speed_inc = args.pred_speed_inc
+    if args.pred_speed_cap:
+        cfg.pred_speed_cap = args.pred_speed_cap
+    if args.kill_effect_ticks:
+        cfg.kill_effect_ticks = args.kill_effect_ticks
 
     if args.install_autostart:
         install_autostart(cfg)
@@ -99,16 +118,16 @@ def main() -> None:
             log.warning("Failed to reset population file: %s", e)
 
     if args.config_panel:
+
         def _on_apply(c: SimConfig, restart: bool) -> None:
             save_config(c)
             if not restart:
                 log.info("Settings applied.")
+
         panel = ConfigPanel(cfg, on_apply=_on_apply)
         panel.connect("destroy", Gtk.main_quit)
-        try:
+        with contextlib.suppress(KeyboardInterrupt):
             Gtk.main()
-        except KeyboardInterrupt:
-            pass
         sys.exit(0)
 
     if not acquire_single_instance_lock():

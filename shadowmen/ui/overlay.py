@@ -6,7 +6,7 @@ import math
 from shadowmen.config import SimConfig
 from shadowmen.entities import Colony
 from shadowmen.ui.panel import ConfigPanel
-from shadowmen.utils import get_windows, WindowSnapshot
+from shadowmen.utils import WindowSnapshot, get_windows
 
 try:
     import gi
@@ -96,7 +96,9 @@ class ShadowMen(Gtk.Window):
 
         def _on_reset_generations() -> None:
             # SAVE_FILE has already been removed by the panel; rebuild from scratch.
-            self.colony = Colony(self.config.population, self.sw, self.sh, config=self.config)
+            self.colony = Colony(
+                self.config.population, self.sw, self.sh, config=self.config
+            )
 
         self._panel = ConfigPanel(
             self.config, on_apply=_on_apply, on_reset_generations=_on_reset_generations
@@ -115,7 +117,11 @@ class ShadowMen(Gtk.Window):
 
             if len(old) != len(self.win_cache) or any(
                 abs(o.x - n.x) > 5 or abs(o.y - n.y) > 5
-                for o, n in zip(sorted(old, key=lambda w: w.id), sorted(self.win_cache, key=lambda w: w.id))
+                for o, n in zip(
+                    sorted(old, key=lambda w: w.id),
+                    sorted(self.win_cache, key=lambda w: w.id),
+                    strict=False,
+                )
             ):
                 self.colony.react_to_windows(old, self.win_cache)
 
@@ -144,7 +150,8 @@ class ShadowMen(Gtk.Window):
 
     def _draw_kill_effects(self, cr: cairo.Context) -> None:
         for ke in self.colony.kill_effects:
-            if ke.max_age <= 0: continue
+            if ke.max_age <= 0:
+                continue
             ratio = ke.age / ke.max_age
             alpha = 0.75 * (1.0 - ratio)
             radius = 8 + ratio * 22
@@ -162,7 +169,9 @@ class ShadowMen(Gtk.Window):
         msg = "COLONY EXTINCT"
         sub = "run with --reset to start fresh"
 
-        cr.select_font_face("sans-serif", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.select_font_face(
+            "sans-serif", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD
+        )
 
         # Draw main message
         cr.set_font_size(32)
@@ -189,7 +198,9 @@ class ShadowMen(Gtk.Window):
         if not stats:
             return
         cr.set_font_size(11)
-        cr.select_font_face("monospace", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+        cr.select_font_face(
+            "monospace", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL
+        )
 
         # Subtle background for stats
         cr.set_source_rgba(0, 0, 0, 0.25)

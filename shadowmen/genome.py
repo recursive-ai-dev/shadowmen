@@ -1,10 +1,11 @@
 from __future__ import annotations
-import random
-import math
-from dataclasses import dataclass, field
-from typing import ClassVar, Dict, Tuple
 
-TRAITS: Dict[str, Tuple[float, float, float]] = {
+import math
+import random
+from dataclasses import dataclass, field
+from typing import ClassVar
+
+TRAITS: dict[str, tuple[float, float, float]] = {
     "walk_speed": (1.2, 4.8, 2.2),
     "run_mult": (1.8, 3.5, 2.4),
     "scale": (13.0, 28.0, 18.0),
@@ -23,9 +24,11 @@ TRAITS: Dict[str, Tuple[float, float, float]] = {
     "metabolism": (0.01, 0.1, 0.05),
 }
 
+
 @dataclass
 class Genome:
     """Genetic representation of a Person, defining its traits and behaviors."""
+
     walk_speed: float = 2.2
     run_mult: float = 2.4
     scale: float = 18.0
@@ -44,7 +47,7 @@ class Genome:
     metabolism: float = 0.05
     fitness: float = field(default=0.0, compare=False)
 
-    _rng: ClassVar[random.Random] = random
+    _rng = random
 
     @classmethod
     def random(cls) -> Genome:
@@ -71,22 +74,28 @@ class Genome:
         dist_sq = 0.0
         for trait, (lo, hi, _) in TRAITS.items():
             r = hi - lo
-            if r <= 0: continue
+            if r <= 0:
+                continue
             norm_a = (getattr(self, trait) - lo) / r
             norm_b = (getattr(other, trait) - lo) / r
             dist_sq += (norm_a - norm_b) ** 2
         return 1.0 / (1.0 + math.sqrt(dist_sq))
 
-    def body_color(self) -> Tuple[float, float, float, float]:
+    def body_color(self) -> tuple[float, float, float, float]:
         """Determine the RGBA color of the person's body based on genetic traits."""
-        return (max(0.0, min(0.28, 0.04 + self.hue_r)), 0.04, max(0.0, min(0.40, 0.12 + self.hue_b)), 0.95)
+        return (
+            max(0.0, min(0.28, 0.04 + self.hue_r)),
+            0.04,
+            max(0.0, min(0.40, 0.12 + self.hue_b)),
+            0.95,
+        )
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         """Convert the genome traits to a dictionary for serialization."""
         return {k: getattr(self, k) for k in TRAITS}
 
     @classmethod
-    def from_dict(cls, d: Dict[str, float]) -> Genome:
+    def from_dict(cls, d: dict[str, float]) -> Genome:
         """Create a genome instance from a dictionary of trait values."""
         kwargs = {}
         if not isinstance(d, dict):
@@ -102,9 +111,11 @@ class Genome:
                 kwargs[k] = default
         return cls(**kwargs)
 
+
 @dataclass
 class PredatorGenome:
     """Genetic representation of a Predator, defining its hunting capabilities."""
+
     speed_mult: float = 1.0
     sense_range: float = 600.0
     mutation_rate: float = 0.12
@@ -113,8 +124,7 @@ class PredatorGenome:
     def random(cls) -> PredatorGenome:
         """Create a new predator genome with random hunting traits."""
         return cls(
-            speed_mult=random.uniform(0.8, 1.2),
-            sense_range=random.uniform(400, 1000)
+            speed_mult=random.uniform(0.8, 1.2), sense_range=random.uniform(400, 1000)
         )
 
     def mutate(self) -> PredatorGenome:
@@ -124,23 +134,26 @@ class PredatorGenome:
             sense_range=max(200, min(2000, self.sense_range + random.gauss(0, 50))),
         )
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         """Convert the predator genome traits to a dictionary."""
         return {"speed_mult": self.speed_mult, "sense_range": self.sense_range}
 
     @classmethod
-    def from_dict(cls, d: Dict[str, float]) -> PredatorGenome:
+    def from_dict(cls, d: dict[str, float]) -> PredatorGenome:
         """Create a predator genome from a dictionary."""
         if not isinstance(d, dict):
             d = {}
 
         def _get_float(key: str, default: float) -> float:
             val = d.get(key)
-            if val is None: return default
-            try: return float(val)
-            except (ValueError, TypeError): return default
+            if val is None:
+                return default
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return default
 
         return cls(
             speed_mult=_get_float("speed_mult", 1.0),
-            sense_range=_get_float("sense_range", 600.0)
+            sense_range=_get_float("sense_range", 600.0),
         )
