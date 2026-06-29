@@ -491,7 +491,9 @@ class Colony:
                         key=lambda person: person.genome.fitness,
                         reverse=True,
                     )
-                    a, b = random.sample(ranked[: max(2, len(ranked) // 2)], 2)
+                    parents = ranked[: max(2, len(ranked) // 2)]
+                    a = random.choice(parents)
+                    b = self._select_mate(parents, a)
                     child = Person(
                         self.sw,
                         self.sh,
@@ -593,12 +595,50 @@ class Colony:
             self.config.pred_base_speed * self.predator.genome.speed_mult
         )
 
+    def _mate_score(self, a: Person, b: Person) -> float:
+        """Calculate mating score based on spatial proximity and sexual selection."""
+        # Island Speciation: Closer individuals are much more likely to mate
+        dist = math.hypot(a.x - b.x, a.y - b.y)
+        spatial_score = 1.0 / (1.0 + dist * 0.05)
+
+        # Sexual Selection: Preference for display trait (hue_r)
+        trait_diff = abs(a.genome.mating_preference - b.genome.hue_r)
+        sexual_score = 1.0 / (1.0 + trait_diff * 10.0)
+
+        return spatial_score * sexual_score
+
+    def _select_mate(self, pool: list[Person], parent: Person) -> Person:
+        """Select a mate for a parent using sexual selection and island speciation rules."""
+        if len(pool) < 2:
+            return pool[0] if pool else parent
+
+        candidates = [p for p in pool if p is not parent]
+        if not candidates:
+            return parent
+
+        # Roulette wheel selection based on mate score
+        scores = [self._mate_score(parent, c) for c in candidates]
+        total_score = sum(scores)
+
+        if total_score <= 0:
+            return random.choice(candidates)
+
+        pick = random.uniform(0, total_score)
+        current = 0.0
+        for c, score in zip(candidates, scores):
+            current += score
+            if current >= pick:
+                return c
+        return candidates[-1]
+
     def _spawn_replacement(self, pred: Predator) -> None:
         if len(self.people) < 2:
             self.people.append(Person(self.sw, self.sh))
             return
         far = sorted(self.people, key=lambda p: abs(p.x - pred.x), reverse=True)
-        a, b = random.sample(far[: max(2, len(far) // 2)], 2)
+        parents = far[: max(2, len(far) // 2)]
+        a = random.choice(parents)
+        b = self._select_mate(parents, a)
         child = Person(
             self.sw, self.sh, Genome.crossover(a.genome, b.genome), a.home_x, a.home_y
         )
@@ -611,7 +651,8 @@ class Colony:
         ranked = sorted(self.people, key=lambda p: p.genome.fitness, reverse=True)
         parents = ranked[: max(2, len(self.people) // 2)]
         for loser in ranked[len(parents) :]:
-            a, b = random.sample(parents, 2)
+            a = random.choice(parents)
+            b = self._select_mate(parents, a)
             loser.genome = Genome.crossover(a.genome, b.genome)
             loser.energy = 100.0
             loser.state = "walk"

@@ -60,3 +60,69 @@ def test_colony_interaction_radius():
 
     assert p2.energy > 30
     assert p1.energy < 100
+
+
+def test_sexual_selection():
+    """Verify that individuals prefer mates with traits matching their preference."""
+    colony = Colony(0, 1000, 1000, config=SimConfig())
+
+    # Parent wants a red mate
+    parent = Person(1000, 1000, genome=Genome(mating_preference=0.15))
+    parent.x, parent.y = 500, 500
+
+    # Potential mates, all equidistant
+    m_red = Person(1000, 1000, genome=Genome(hue_r=0.15))
+    m_red.x, m_red.y = 500, 500
+
+    m_blue = Person(1000, 1000, genome=Genome(hue_r=-0.04))
+    m_blue.x, m_blue.y = 500, 500
+
+    m_neutral = Person(1000, 1000, genome=Genome(hue_r=0.05))
+    m_neutral.x, m_neutral.y = 500, 500
+
+    score_red = colony._mate_score(parent, m_red)
+    score_blue = colony._mate_score(parent, m_blue)
+    score_neutral = colony._mate_score(parent, m_neutral)
+
+    assert score_red > score_neutral
+    assert score_neutral > score_blue
+
+    # Calculate probability distribution and mathematically verify
+    # score is strictly based on sexual selection since spatial distance is 0
+    assert score_red == pytest.approx(1.0)
+    assert score_blue == pytest.approx(1.0 / (1.0 + abs(0.15 - (-0.04)) * 10.0))
+
+
+def test_island_speciation():
+    """Verify that spatial distance affects mate selection."""
+    colony = Colony(0, 1000, 1000, config=SimConfig())
+
+    parent = Person(1000, 1000, genome=Genome(mating_preference=0.0))
+    parent.x, parent.y = 100, 100
+
+    # Identical traits, different distances
+    close = Person(1000, 1000, genome=Genome(hue_r=0.0))
+    close.x, close.y = 110, 100  # dist = 10
+
+    far = Person(1000, 1000, genome=Genome(hue_r=0.0))
+    far.x, far.y = 900, 100  # dist = 800
+
+    score_close = colony._mate_score(parent, close)
+    score_far = colony._mate_score(parent, far)
+
+    assert score_close > score_far
+
+    # Mathematically verify spatial score formula
+    assert score_close == pytest.approx(1.0 / (1.0 + 10 * 0.05))
+    assert score_far == pytest.approx(1.0 / (1.0 + 800 * 0.05))
+
+    # Verify probability of choosing close vs far
+    # The _select_mate function should probabilistically prefer close
+    pool = [close, far]
+    close_chosen = 0
+    for _ in range(100):
+        if colony._select_mate(pool, parent) == close:
+            close_chosen += 1
+
+    # Based on scores, close (~0.666) should be chosen significantly more than far (~0.024)
+    assert close_chosen > 75

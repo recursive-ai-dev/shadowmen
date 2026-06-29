@@ -22,6 +22,7 @@ TRAITS: dict[str, tuple[float, float, float]] = {
     "shelter_skill": (0.0001, 0.005, 0.0008),
     "altruism": (0.0, 1.0, 0.1),
     "metabolism": (0.01, 0.1, 0.05),
+    "mating_preference": (-0.04, 0.15, 0.0),
 }
 
 
@@ -45,6 +46,7 @@ class Genome:
     shelter_skill: float = 0.0008
     altruism: float = 0.1
     metabolism: float = 0.05
+    mating_preference: float = 0.0
     fitness: float = field(default=0.0, compare=False)
 
     _rng = random

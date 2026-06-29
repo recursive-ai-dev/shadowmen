@@ -67,3 +67,11 @@ def test_genome_from_dict_incomplete():
     g = Genome.from_dict(d)
     assert g.walk_speed == pytest.approx(3.0)
     assert g.run_mult == TRAITS["run_mult"][2]  # Default value
+
+def test_genome_mating_preference_serialization():
+    g = Genome(mating_preference=0.1)
+    d = g.to_dict()
+    assert d["mating_preference"] == pytest.approx(0.1)
+
+    g2 = Genome.from_dict(d)
+    assert g2.mating_preference == pytest.approx(0.1)
