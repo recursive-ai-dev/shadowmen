@@ -478,20 +478,31 @@ class Colony:
         for p in self.people:
             shash.insert(p, p.x, p.y)
 
-        people_copy = list(self.people)
-        for p in people_copy:
+        new_people: list[Person] = []
+        dead_count = 0
+        for p in self.people:
             p.age += 1
             if p.age > p.max_age:
-                if p in self.people:
-                    self.people.remove(p)
-                # Spawn replacement
-                if len(self.people) >= 2:
-                    ranked = sorted(
-                        self.people,
-                        key=lambda person: person.genome.fitness,
-                        reverse=True,
-                    )
-                    parents = ranked[: max(2, len(ranked) // 2)]
+                dead_count += 1
+            else:
+                new_people.append(p)
+
+        self.people = new_people
+
+        # Hoist sort outside loop for O(N log N) replacement spawning
+        if dead_count > 0:
+            if len(self.people) >= 2:
+                ranked = sorted(
+                    self.people,
+                    key=lambda person: person.genome.fitness,
+                    reverse=True,
+                )
+                parents = ranked[: max(2, len(ranked) // 2)]
+            else:
+                parents = []
+
+            for _ in range(dead_count):
+                if len(self.people) >= 2 and parents:
                     a = random.choice(parents)
                     b = self._select_mate(parents, a)
                     child = Person(
@@ -532,10 +543,14 @@ class Colony:
             for b in neighbors:
                 if a is b or b.energy >= 40:
                     continue
+                # Use Euclidean distance check since SpatialHash returns bounding box
+                if math.hypot(b.x - a.x, b.y - a.y) > interaction_radius:
+                    continue
                 r = a.genome.relatedness(b.genome)
                 # Kin selection based sharing
                 if r * 20.0 > 8.0:
-                    amt = 10 * a.genome.altruism
+                    # Invariant violation fix: clamp energy transfer to avoid negative energy
+                    amt = min(10 * a.genome.altruism, a.energy)
                     a.energy -= amt
                     b.energy += amt
                     a.genome.fitness += 0.8 * r
@@ -548,8 +563,11 @@ class Colony:
             return
         pred.update(self.people, windows)
 
+        # Clear fleeing flag first to prevent overwriting altruistic signals
         for p in self.people:
             p.fleeing = False
+
+        for p in self.people:
             if abs(p.x - pred.x) < self.config.flee_radius_x:
                 p.fleeing = True
                 if random.random() < p.genome.altruism and p.alarm_timer <= 0:
@@ -558,9 +576,11 @@ class Colony:
                     for kin in neighbors:
                         if kin is p:
                             continue
-                        r = p.genome.relatedness(kin.genome)
-                        if r * 50.0 > 5.0:
-                            kin.fleeing = True
+                        # Use Euclidean distance check since SpatialHash returns bounding box
+                        if math.hypot(kin.x - p.x, kin.y - p.y) <= 400:
+                            r = p.genome.relatedness(kin.genome)
+                            if r * 50.0 > 5.0:
+                                kin.fleeing = True
 
         for p in self.people:
             if p.fleeing and p.state not in ("climb", "fall", "jump"):
@@ -572,15 +592,23 @@ class Colony:
                 )
 
         catch_r = pred.catch_radius()
-        # Create a copy for safe iteration while removing
-        people_copy = list(self.people)
-        for p in people_copy:
+
+        # Batch deletion: O(N) filtering rather than O(N^2) list.remove
+        survivors = []
+        kill_count = 0
+        for p in self.people:
             if math.hypot(p.x - pred.x, p.y - pred.y) < catch_r:
                 self.kill_effects.append(KillEffect(p.x, p.y))
-                if p in self.people:
-                    self.people.remove(p)
                 pred.on_kill()
-                self._spawn_replacement(pred)
+                kill_count += 1
+            else:
+                survivors.append(p)
+
+        self.people = survivors
+
+        # Spawn replacements
+        for _ in range(kill_count):
+            self._spawn_replacement(pred)
 
         if pred.kills >= 5:
             self._predator_reproduction()
